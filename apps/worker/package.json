@@ -1,0 +1,17 @@
+{
+  "name": "@kritt-radar/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "cli": "tsx --env-file=../../.env src/cli.ts"
+  },
+  "dependencies": {
+    "@kritt-radar/collectors": "workspace:*",
+    "@kritt-radar/core": "workspace:*",
+    "@kritt-radar/db": "workspace:*",
+    "@kritt-radar/pipeline": "workspace:*"
+  },
+  "devDependencies": { "tsx": "^4.19.2" }
+}

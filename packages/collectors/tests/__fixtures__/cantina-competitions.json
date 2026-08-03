@@ -1,22 +1,28 @@
-{
-  "competitions": [
-    {
-      "id": "orbit-lending",
-      "name": "Orbit Lending",
-      "totalPrize": 120000,
-      "startDate": "2026-07-30T00:00:00.000Z",
-      "endDate": "2026-08-20T00:00:00.000Z",
-      "repositoryUrl": "https://github.com/orbit-fi/lending.git",
-      "state": "active"
+[
+  {
+    "id": "e7af4986-183d-4764-8bd2-1d6b47f87d99",
+    "name": "orbit-lending",
+    "url": "https://cantina.xyz/competitions/e7af4986-183d-4764-8bd2-1d6b47f87d99",
+    "company": {
+      "name": "Orbit",
+      "handle": "Orbit",
+      "github": "https://github.com/orbit-fi"
     },
-    {
-      "id": "archived-one",
-      "name": "Archived One",
-      "totalPrize": 30000,
-      "startDate": "2026-01-01T00:00:00.000Z",
-      "endDate": "2026-01-20T00:00:00.000Z",
-      "repositoryUrl": "https://github.com/foo/bar",
-      "state": "archived"
-    }
-  ]
-}
+    "timeframe": { "start": "2026-07-30T00:00:00Z", "end": "2026-08-20T00:00:00Z" },
+    "status": "active",
+    "currencyCode": "USDC",
+    "totalRewardPot": "120000",
+    "kycRequired": false,
+    "kind": "competition"
+  },
+  {
+    "id": "aaaa1111-183d-4764-8bd2-1d6b47f87d99",
+    "name": "archived-one",
+    "url": "https://cantina.xyz/competitions/aaaa1111-183d-4764-8bd2-1d6b47f87d99",
+    "company": { "name": "Foo", "github": null },
+    "timeframe": { "start": "2026-01-01T00:00:00Z", "end": "2026-01-20T00:00:00Z" },
+    "status": "complete",
+    "totalRewardPot": "30000",
+    "kind": "competition"
+  }
+]

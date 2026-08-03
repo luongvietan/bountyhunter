@@ -3,20 +3,32 @@ import fixture from './__fixtures__/cantina-competitions.json' with { type: 'jso
 import { parseCantinaCompetitions } from '../src/sources/cantina-competitions.js';
 
 describe('parseCantinaCompetitions', () => {
-  it('đọc mảng lồng trong khoá competitions', () => {
+  it('đọc mảng trần', () => {
     const out = parseCantinaCompetitions(fixture);
     expect(out).toHaveLength(1);
-    expect(out[0]!.payload.externalId).toBe('orbit-lending');
+    expect(out[0]!.payload.externalId).toBe('e7af4986-183d-4764-8bd2-1d6b47f87d99');
   });
 
-  it('gỡ đuôi .git khỏi repo url', () => {
-    expect(parseCantinaCompetitions(fixture)[0]!.payload.repoUrl).toBe('github.com/orbit-fi/lending');
+  it('đọc totalRewardPot dạng chuỗi thành số', () => {
+    expect(parseCantinaCompetitions(fixture)[0]!.payload.poolUsd).toBe(120000);
   });
 
-  it('bỏ competition đã archived', () => {
-    expect(
-      parseCantinaCompetitions(fixture).some((o) => o.payload.externalId === 'archived-one'),
-    ).toBe(false);
+  it('lấy ngày từ timeframe', () => {
+    const p = parseCantinaCompetitions(fixture)[0]!.payload;
+    expect(p.startsAt).toBe('2026-07-30T00:00:00Z');
+    expect(p.endsAt).toBe('2026-08-20T00:00:00Z');
+  });
+
+  it('bỏ competition đã complete', () => {
+    expect(parseCantinaCompetitions(fixture).some((o) => o.payload.title === 'archived-one')).toBe(
+      false,
+    );
+  });
+
+  it('company.github là URL tổ chức nên không thành repo key', () => {
+    // github.com/orbit-fi thiếu phần tên repo -> normalizeRepoUrl trả null.
+    expect(parseCantinaCompetitions(fixture)[0]!.payload.repoUrl).toBeNull();
+    expect(parseCantinaCompetitions(fixture)[0]!.payload.sponsor).toBe('Orbit');
   });
 
   it('trả mảng rỗng khi payload sai hình dạng', () => {

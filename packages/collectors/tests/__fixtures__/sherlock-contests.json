@@ -1,21 +1,40 @@
-[
-  {
-    "id": 771,
-    "title": "Zephyr Perps",
-    "short_description": "Perpetuals exchange",
-    "prize_pool": 75000,
-    "starts_at": 1785312000,
-    "ends_at": 1785916800,
-    "repo_urls": ["https://github.com/zephyr-fi/perps-core"],
-    "status": "RUNNING"
-  },
-  {
-    "id": 500,
-    "title": "Draft Contest",
-    "prize_pool": 0,
-    "starts_at": 1780000000,
-    "ends_at": 1780600000,
-    "repo_urls": [],
-    "status": "DRAFT"
-  }
-]
+{
+  "page": 1,
+  "next_page": 2,
+  "total": 12,
+  "has_next": true,
+  "pages": 2,
+  "items": [
+    {
+      "id": 1279,
+      "rewards": 150000,
+      "prize_pool": 150000,
+      "private": false,
+      "ends_at": 1785916800,
+      "starts_at": 1785312000,
+      "token": "USDC",
+      "title": "Zephyr Perps",
+      "short_description": "Perpetuals exchange",
+      "status": "RUNNING"
+    },
+    {
+      "id": 500,
+      "rewards": 0,
+      "prize_pool": 0,
+      "private": false,
+      "starts_at": 1780000000,
+      "ends_at": 1780600000,
+      "title": "Draft Contest",
+      "status": "DRAFT"
+    },
+    {
+      "id": 901,
+      "rewards": 40000,
+      "private": true,
+      "starts_at": 1785312000,
+      "ends_at": 1785916800,
+      "title": "Private Contest",
+      "status": "RUNNING"
+    }
+  ]
+}
