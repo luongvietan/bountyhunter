@@ -1,0 +1,40 @@
+[
+  {
+    "slug": "hedera",
+    "project": "Hedera",
+    "maxBounty": 30000,
+    "rewardsPool": 1000000,
+    "launchDate": "2025-02-05T04:21:00.000Z",
+    "updatedDate": "2026-08-03T04:00:00.000Z",
+    "inviteOnly": false,
+    "assets": [
+      {
+        "id": "1FSwpz3sYWqsBHdQogooWw",
+        "url": "https://github.com/hiero-ledger/hiero-consensus-node",
+        "type": "blockchain_dlt",
+        "addedAt": "2025-01-31T10:53:46.365Z"
+      },
+      {
+        "id": "9xYzAbCdEfGhIjKlMnOpQr",
+        "url": "https://hedera.com/dashboard",
+        "type": "websites_and_applications",
+        "addedAt": "2026-07-30T00:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "slug": "private-one",
+    "project": "Private One",
+    "maxBounty": 50000,
+    "launchDate": "2026-01-01T00:00:00.000Z",
+    "inviteOnly": true,
+    "assets": [
+      {
+        "id": "z1",
+        "url": "https://github.com/private/repo",
+        "type": "blockchain_dlt",
+        "addedAt": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+]

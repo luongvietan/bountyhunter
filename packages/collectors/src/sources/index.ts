@@ -15,3 +15,9 @@ export {
   AUDIT_REPO_SOURCES,
   type AuditReportPayload,
 } from './audit-report-repos.js';
+export {
+  immunefiPrograms,
+  parseImmunefiProjects,
+  type ImmunefiProgramPayload,
+  type ImmunefiAsset,
+} from './immunefi-programs.js';
