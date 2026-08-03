@@ -27,3 +27,6 @@ desktop.ini
 *.tsbuildinfo
 
 pgdata/
+
+# git worktrees (thu muc lam viec phu, khong phai noi dung repo)
+.worktrees/
