@@ -1,5 +1,9 @@
 import type { PrismaClient } from '@kritt-radar/db';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { DecisionForm } from '../src/app/merge-queue/decision-form.js';
+import { parseDecisionForm } from '../src/app/merge-queue/decision-parser.js';
 import {
   inferCandidateRoles,
   listMergeQueue,
@@ -92,5 +96,93 @@ describe('merge queue read model', () => {
     });
     expect(Number.isNaN(page.candidates[0]!.tokenJaccard)).toBe(false);
     expect(Number.isNaN(page.candidates[0]!.editSimilarity)).toBe(false);
+  });
+});
+
+function decisionForm(candidateId: FormDataEntryValue, action: FormDataEntryValue): FormData {
+  const formData = new FormData();
+  formData.set('candidateId', candidateId);
+  formData.set('action', action);
+  return formData;
+}
+
+describe('merge decision form parsing', () => {
+  it('rejects a form with missing decision fields', () => {
+    expect(parseDecisionForm(new FormData())).toEqual({
+      ok: false,
+      message: 'Missing candidate decision.',
+    });
+  });
+
+  it.each(['approve', 'reject', 'reopen'] as const)('accepts a valid %s decision', (action) => {
+    expect(parseDecisionForm(decisionForm('candidate-1', action))).toEqual({
+      ok: true,
+      value: { candidateId: 'candidate-1', action },
+    });
+  });
+
+  it('rejects an unsupported decision action', () => {
+    expect(parseDecisionForm(decisionForm('candidate-1', 'delete'))).toEqual({
+      ok: false,
+      message: 'Invalid candidate decision.',
+    });
+  });
+
+  it.each(['', '   '])('rejects an empty candidate ID %j', (candidateId) => {
+    expect(parseDecisionForm(decisionForm(candidateId, 'approve'))).toEqual({
+      ok: false,
+      message: 'Invalid candidate decision.',
+    });
+  });
+
+  it.each(['candidateId', 'action'] as const)('rejects repeated %s fields', (field) => {
+    const formData = decisionForm('candidate-1', 'approve');
+    formData.append(field, field === 'candidateId' ? 'candidate-2' : 'reject');
+
+    expect(parseDecisionForm(formData)).toEqual({
+      ok: false,
+      message: 'Invalid candidate decision.',
+    });
+  });
+
+  it.each(['candidateId', 'action'] as const)('rejects non-text %s fields', (field) => {
+    const formData = decisionForm('candidate-1', 'approve');
+    formData.set(field, new File(['not text'], 'decision.txt', { type: 'text/plain' }));
+
+    expect(parseDecisionForm(formData)).toEqual({
+      ok: false,
+      message: 'Invalid candidate decision.',
+    });
+  });
+});
+
+describe('merge decision controls', () => {
+  it('keeps rejection independent from the required approval confirmation', () => {
+    const markup = renderToStaticMarkup(
+      createElement(DecisionForm, {
+        candidate: {
+          id: 'candidate-1',
+          status: 'pending',
+          similarity: 0.84,
+          tokenJaccard: 0.8,
+          editSimilarity: 0.88,
+          createdAt: '2026-08-04T00:00:00.000Z',
+          decidedAt: null,
+          source: provisional,
+          target: canonical,
+          approvable: true,
+          blockedReason: null,
+        },
+      }),
+    );
+    const forms = [...markup.matchAll(/<form\b[\s\S]*?<\/form>/g)].map(([formMarkup]) => formMarkup);
+    const approvalForm = forms.find((formMarkup) => formMarkup.includes('value="approve"'));
+    const rejectionForm = forms.find((formMarkup) => formMarkup.includes('value="reject"'));
+
+    expect(forms).toHaveLength(2);
+    expect(approvalForm).toContain('type="checkbox"');
+    expect(approvalForm).toContain('required=""');
+    expect(rejectionForm).not.toContain('type="checkbox"');
+    expect(rejectionForm).not.toContain('required=""');
   });
 });

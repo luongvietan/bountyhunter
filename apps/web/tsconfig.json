@@ -4,12 +4,11 @@
     "baseUrl": ".",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "isolatedModules": true,
     "noEmit": true,
-    "plugins": [{ "name": "next" }],
-    "paths": {
-      "@kritt-radar/db": ["../../packages/db/src/index.ts"],
-      "@kritt-radar/pipeline": ["../../packages/pipeline/src/index.ts"]
-    }
+    "plugins": [{ "name": "next" }]
   },
   "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
