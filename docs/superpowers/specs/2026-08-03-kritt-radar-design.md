@@ -22,9 +22,22 @@ commit sha để dán vào scope của một scan Open-Kritt.
 
 ## 2. Ràng buộc
 
-- **Toolchain**: Node 24.14, pnpm 10.33, Docker 29 + Compose v5, Postgres 16.
+- **Toolchain**: Node 24.14, pnpm 10.33, Docker 29 + Compose v5, Postgres 16,
+  Python 3.11 + uv (chỉ cho sidecar scraper).
+- **Scraping HTML dùng Scrapling** (Python 3.10+), chạy như sidecar riêng vì nó
+  không có bản TypeScript. Chọn nó thay Playwright vì tính năng `adaptive=True`
+  (AutoMatch) định vị lại element khi site đổi cấu trúc — trực tiếp giảm rủi ro
+  "selector dễ vỡ" ở mục 13. Chỉ dùng `Fetcher` và `DynamicFetcher`; **không dùng
+  `StealthyFetcher`** vì nó bypass Cloudflare Turnstile, trái với quy tắc dưới đây.
+- **Quy tắc thứ tự nguồn: API trước, mirror JSON sau, scrape HTML cuối cùng.**
+  Nguồn nào có endpoint JSON thì không được scrape, kể cả khi scrape dễ hơn.
+  Không phải vì lý do pháp lý mà vì chất lượng dữ liệu: mirror JSON của Immunefi
+  cho `addedAt` theo từng asset và lịch sử thay đổi hàng ngày — hai thứ mà trang
+  HTML live không hề có. Scrapling vì vậy chỉ còn dùng ở pha 3, và chỉ sau khi đã
+  xác nhận nguồn đó không có API chính thức.
 - **ToS**: chỉ dùng endpoint công khai, tôn trọng `robots.txt`, giới hạn tốc độ,
-  khai báo User-Agent kèm thông tin liên hệ. Không bypass anti-bot.
+  khai báo User-Agent kèm thông tin liên hệ. Không bypass anti-bot. Nguồn nào chặn
+  thì bỏ nguồn đó, không tìm cách đi vòng.
 - **Chi phí nguồn**: X/Twitter API cần gói trả phí; Discord cần bot được mời vào
   server. Hai collector này phải hỏng-mềm khi thiếu credential, không được làm
   chết cả pipeline.
@@ -41,10 +54,20 @@ Monorepo pnpm workspace:
 packages/core          types + hàm chấm điểm thuần, không I/O
 packages/collectors    mỗi nguồn một module, chỉ fetch + chuẩn hoá
 packages/db            Prisma schema + client
-apps/worker            cron scheduler + Playwright runtime
+apps/worker            cron scheduler
 apps/web               Next.js dashboard
-docker-compose.yml     postgres + worker + web
+services/scraper       sidecar Python: Scrapling sau một HTTP API hẹp
+docker-compose.yml     postgres + scraper + worker + web
 ```
+
+Sidecar scraper là **dịch vụ sống lâu**, không phải CLI gọi từng lần: Scrapling
+tái dùng browser qua `DynamicSession`, khởi động lại mỗi request sẽ chậm gấp
+nhiều lần. Nó phơi ra đúng một endpoint `POST /extract` nhận `{url, engine,
+selectors, adaptive}` và trả JSON đã chuẩn hoá.
+
+Nhờ vậy `interface Collector` bên TypeScript **không đổi**: collector dùng
+Scrapling chỉ là một collector gọi HTTP tới sidecar, nên vẫn test offline bằng
+fixture y hệt các collector khác.
 
 Luồng dữ liệu một chiều:
 
@@ -150,9 +173,27 @@ entity. Mỗi collector có `__fixtures__/` chứa response thật đã lưu đ�
 |---|---|---|
 | 1 | `c4-contests`, `sherlock-contests`, `cantina-competitions` | API/RSS công khai |
 | 1 | `github-repo-activity`, `audit-report-repos` | GitHub API |
+| 1 | `immunefi-programs` | Mirror JSON trên GitHub |
 | 2 | `defillama-tvl`, `etherscan-verified` | On-chain |
-| 3 | `hackerone-hacktivity`, `platform-leaderboards` | Playwright |
+| 3 | `hackerone-programs` (API chính thức), `platform-leaderboards` (Scrapling) | Hỗn hợp |
 | 4 | `x-announcements`, `discord-announcements`, `blog-rss` | Cộng đồng |
+
+### `immunefi-programs`
+
+Immunefi không có API công khai và trang explore có Cloudflare. Thay vì scrape,
+dùng mirror cộng đồng cập nhật bằng bot:
+
+- Danh sách: `raw.githubusercontent.com/infosec-us-team/Immunefi-Bug-Bounty-Programs-Unofficial/main/projects.json`
+- Lịch sử: commit log của chính repo đó, mỗi ngày một commit ghi rõ project nào
+  được thêm, gỡ, hoặc cập nhật.
+
+Mirror này **giàu hơn** trang live: mỗi program có `assets[]` kèm URL repo GitHub
+và `addedAt` theo từng asset, nên `audit_gap` lấy được scope ở mức asset và
+`freshness` biết chính xác ngày scope đổi thay vì phải suy ra từ contentHash.
+
+Rủi ro cần theo dõi: đây là mirror do cộng đồng duy trì, không phải nguồn chính
+thức. Collector phải coi "repo không có commit mới quá 7 ngày" là tín hiệu mirror
+đã chết và báo lên `/health`, vì dữ liệu cũ nhìn y hệt dữ liệu mới.
 
 Pha 1 xong là đã dùng được thật: `audit_gap` nhả ra danh sách file + commit sha
 để dán vào scope Kritt. Các pha sau làm điểm số tinh hơn, không đổi luồng làm việc.
@@ -244,7 +285,14 @@ trọng hơn. Bảng `Outcome` sẽ trả lời câu đó sau.
   bộ test vàng. Đây là rủi ro số một.
 - **Map audit report → commit date** thường không có sẵn; nhiều report không ghi
   commit. Fallback dùng `publishedAt`, và đánh dấu `confidence` thấp hơn.
-- **Selector Playwright dễ vỡ** — cô lập ở pha 3 để không kéo đổ pha 1.
+- **Selector HTML dễ vỡ** — giảm bằng `adaptive=True` của Scrapling, nhưng
+  AutoMatch chỉ định vị lại được element khi cấu trúc đổi vừa phải; site làm lại
+  toàn bộ thì vẫn phải sửa tay. Mỗi collector HTML phải có test khẳng định "parse
+  ra 0 bản ghi" là lỗi chứ không phải kết quả hợp lệ — nếu không, site đổi layout
+  sẽ âm thầm biến thành "hôm nay không có program mới".
+- **Sidecar Python là thành phần vận hành thứ hai** — thêm một thứ có thể chết
+  độc lập. Harness phải coi sidecar chết là `status=error` của riêng collector đó,
+  không phải sự cố toàn cục.
 - **Trọng số ban đầu là phỏng đoán** — chấp nhận, và đó chính là lý do có `Outcome`.
 - **Nguồn có thể đổi ToS hoặc chặn** — thiết kế cho phép tắt từng collector qua
   config mà không phải sửa code.
