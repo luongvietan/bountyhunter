@@ -99,4 +99,27 @@ describe('extractAuditGap', () => {
     expect(s.value).toBeLessThanOrEqual(1);
     expect(s.value).toBeGreaterThanOrEqual(0);
   });
+
+  it('accepts collector changes already bounded by the current audit cutoff', () => {
+    const s = extractAuditGap({
+      commits: [],
+      lastAuditAt: lastAudit,
+      pathGlobs: ['src/**/*.sol'],
+      totalLoc: 5000,
+      changesSinceAudit: {
+        files: [
+          { path: 'src/Hooks.sol', changedLoc: 120 },
+          { path: 'docs/x.md', changedLoc: 10 },
+        ],
+        commits: ['new1'],
+      },
+    });
+
+    expect(s.evidence).toMatchObject({
+      changedLoc: 120,
+      files: ['src/Hooks.sol'],
+      commits: ['new1'],
+    });
+    expect(s.value).toBeGreaterThan(0);
+  });
 });

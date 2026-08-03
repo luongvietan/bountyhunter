@@ -332,3 +332,5 @@ export async function materializeCatalogFoundation(
     candidates: audits.candidates,
   };
 }
+
+export { listRepoTargets, materializeRepoSignals } from '@kritt-radar/pipeline';

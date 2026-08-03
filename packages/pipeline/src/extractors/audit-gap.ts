@@ -1,5 +1,5 @@
 import { clamp01, type SignalValue } from '@kritt-radar/core';
-import { matchesGlobs, type CommitRecord } from '@kritt-radar/collectors';
+import { matchesGlobs, type CommitFile, type CommitRecord } from '@kritt-radar/collectors';
 
 export interface AuditGapInput {
   commits: readonly CommitRecord[];
@@ -9,6 +9,11 @@ export interface AuditGapInput {
   totalLoc: number;
   /** false nghĩa là chưa crawl được commit, khác hẳn "crawl rồi và không có commit nào". */
   hasCommitData?: boolean;
+  /** Compare results already bounded by the audit cutoff at collection time. */
+  changesSinceAudit?: {
+    files: readonly CommitFile[];
+    commits: readonly string[];
+  };
 }
 
 /**
@@ -19,7 +24,8 @@ export interface AuditGapInput {
  * scope của một scan Open-Kritt.
  */
 export function extractAuditGap(input: AuditGapInput): SignalValue {
-  const hasCommitData = input.hasCommitData ?? input.commits.length > 0;
+  const hasCommitData =
+    input.hasCommitData ?? (input.changesSinceAudit !== undefined || input.commits.length > 0);
 
   if (!hasCommitData) {
     return { type: 'audit_gap', value: 0, confidence: 0, evidence: { reason: 'no_commit_data' } };
@@ -39,19 +45,21 @@ export function extractAuditGap(input: AuditGapInput): SignalValue {
   }
 
   const cutoff = input.lastAuditAt.getTime();
-  const newer = input.commits.filter((c) => {
-    const t = Date.parse(c.authoredAt);
-    return Number.isFinite(t) && t > cutoff;
-  });
+  const changesSinceAudit = input.changesSinceAudit;
+  const newer = changesSinceAudit
+    ? []
+    : input.commits.filter((c) => {
+        const t = Date.parse(c.authoredAt);
+        return Number.isFinite(t) && t > cutoff;
+      });
+  const changedFiles = changesSinceAudit?.files ?? newer.flatMap((commit) => commit.files);
 
   let changedLoc = 0;
   const files = new Set<string>();
-  for (const c of newer) {
-    for (const f of c.files) {
-      if (!matchesGlobs(f.path, input.pathGlobs)) continue;
-      files.add(f.path);
-      changedLoc += f.changedLoc;
-    }
+  for (const f of changedFiles) {
+    if (!matchesGlobs(f.path, input.pathGlobs)) continue;
+    files.add(f.path);
+    changedLoc += f.changedLoc;
   }
 
   const denom = Math.log1p(Math.max(input.totalLoc, 1));
@@ -66,7 +74,7 @@ export function extractAuditGap(input: AuditGapInput): SignalValue {
       changedLoc,
       totalLoc: input.totalLoc,
       files: [...files],
-      commits: newer.map((c) => c.sha),
+      commits: changesSinceAudit?.commits ?? newer.map((c) => c.sha),
     },
   };
 }
