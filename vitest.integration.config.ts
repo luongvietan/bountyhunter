@@ -14,7 +14,10 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['apps/**/tests/**/*.integration.test.ts'],
+    include: [
+      'apps/**/tests/**/*.integration.test.ts',
+      'packages/**/tests/**/*.integration.test.ts',
+    ],
     environment: 'node',
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },

@@ -5,6 +5,7 @@ import {
   auditEntitySeed,
   extractFreshness,
   latestBySourceUrl,
+  normalizeIdentityText,
   parseAliases,
   repoEntitySeed,
   scoreCandidate,
@@ -238,7 +239,7 @@ async function materializeAudits(
     const candidateKeys = new Set<string>();
     const programEntities = await tx.entity.findMany({
       where: { programs: { some: {} } },
-      select: { id: true, canonicalName: true },
+      select: { id: true, canonicalName: true, slug: true },
     });
 
     for (const record of records) {
@@ -246,10 +247,26 @@ async function materializeAudits(
       const exactAlias = await tx.entityAlias.findUnique({
         where: { kind_key: { kind: 'audit_hint', key: auditHintKey } },
       });
+      const normalizedHint = normalizeIdentityText(record.report.projectHint);
+      const normalizedMatches = exactAlias || normalizedHint.length === 0
+        ? []
+        : programEntities.filter((entity) =>
+            [entity.canonicalName, entity.slug]
+              .map(normalizeIdentityText)
+              .includes(normalizedHint),
+          );
+      const normalizedExact = normalizedMatches.length === 1 ? normalizedMatches[0] : undefined;
+      const existingReport = await tx.auditReport.findUnique({
+        where: { reportUrl: record.report.reportUrl },
+        select: { entity: { select: { programs: { select: { id: true }, take: 1 } } } },
+      });
 
       let entityId: string;
       if (exactAlias) {
         entityId = exactAlias.entityId;
+        entityIds.add(entityId);
+      } else if (normalizedExact) {
+        entityId = normalizedExact.id;
         entityIds.add(entityId);
       } else {
         const seed = auditEntitySeed(record.report.projectHint);
@@ -288,10 +305,20 @@ async function materializeAudits(
         }
       }
 
+      const reportUpdate = {
+        firm: record.report.firm,
+        publishedAt: record.report.publishedAt,
+        projectHint: record.report.projectHint,
+        observationIds: record.report.observationIds,
+      };
+      const shouldUpdateEntity = Boolean(
+        exactAlias ||
+        (normalizedExact && (!existingReport || existingReport.entity.programs.length === 0)),
+      );
       await tx.auditReport.upsert({
         where: { reportUrl: record.report.reportUrl },
         create: { ...record.report, entityId },
-        update: exactAlias ? { ...record.report, entityId } : record.report,
+        update: { ...reportUpdate, ...(shouldUpdateEntity ? { entityId } : {}) },
       });
     }
     return { reports: records.length, candidates: candidateKeys.size, entityIds };

@@ -11,6 +11,7 @@ export {
 } from './github-repo-activity.js';
 export {
   makeGithubRepoSnapshots,
+  githubRepoSnapshotSourceKey,
   parseHead,
   parseTree,
   parseCompare,

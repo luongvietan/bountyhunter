@@ -1,4 +1,8 @@
-import type { RepoSnapshotPayload, RepoTarget } from '@kritt-radar/collectors';
+import {
+  githubRepoSnapshotSourceKey,
+  type RepoSnapshotPayload,
+  type RepoTarget,
+} from '@kritt-radar/collectors';
 import { normalizeRepoUrl, type SignalValue } from '@kritt-radar/core';
 import type { Prisma, PrismaClient } from '@kritt-radar/db';
 import { z } from 'zod';
@@ -237,11 +241,6 @@ export async function listRepoTargets(prisma: PrismaClient): Promise<RepoTargetR
   return targets;
 }
 
-function snapshotSourceUrl(repoKey: string): string {
-  const [, owner, repository] = repoKey.split('/');
-  return `https://api.github.com/repos/${encodeURIComponent(owner!)}/${encodeURIComponent(repository!)}`;
-}
-
 function isUsableSnapshot(
   snapshot: RepoSnapshotPayload,
 ): snapshot is RepoSnapshotPayload & { error: null; headSha: string } {
@@ -279,7 +278,7 @@ export async function materializeRepoSignals(
   now: Date,
 ): Promise<{ scopes: number; noData: number }> {
   const targets = await listRepoTargets(prisma);
-  const sourceUrls = [...new Set(targets.map(({ repoKey }) => snapshotSourceUrl(repoKey)))];
+  const sourceUrls = [...new Set(targets.map(githubRepoSnapshotSourceKey))];
   const observations = sourceUrls.length === 0
     ? []
     : await prisma.observation.findMany({
@@ -303,7 +302,7 @@ export async function materializeRepoSignals(
 
   let noData = 0;
   for (const target of targets) {
-    const observation = latestBySource.get(snapshotSourceUrl(target.repoKey));
+    const observation = latestBySource.get(githubRepoSnapshotSourceKey(target));
     const parsed = observation ? RepoSnapshotSchema.safeParse(observation.payload) : null;
     const snapshot: RepoSnapshotPayload | null = parsed?.success ? parsed.data : null;
     const signal = snapshot

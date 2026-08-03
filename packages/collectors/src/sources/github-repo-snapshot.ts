@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { fetchJson } from '../http.js';
 import {
+  contentHash,
   makeObservation,
   type Collector,
   type FetchCtx,
@@ -190,6 +191,22 @@ function repoApiBase(repoKey: string): string {
   return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 }
 
+export function githubRepoSnapshotSourceKey(target: RepoTarget): string {
+  const targetHash = contentHash({
+    repoKey: target.repoKey,
+    pathGlobs: [...new Set(target.pathGlobs)].sort(),
+    lastAuditAt: target.lastAuditAt,
+    coveredCommit: target.coveredCommit,
+  });
+  let sourceBase = 'https://api.github.com/';
+  try {
+    sourceBase = repoApiBase(target.repoKey);
+  } catch {
+    // Invalid targets are still isolated observations; request validation happens below.
+  }
+  return `${sourceBase}?kritt_target=${targetHash}`;
+}
+
 export function makeGithubRepoSnapshots(
   listTargets: () => Promise<RepoTarget[]>,
   requestJson: GithubJsonFetcher = defaultGithubJsonFetcher,
@@ -211,14 +228,13 @@ export function makeGithubRepoSnapshots(
 
       for (const target of targets) {
         let baseCommit = target.coveredCommit;
-        let sourceUrl = 'https://api.github.com/';
+        const sourceUrl = githubRepoSnapshotSourceKey(target);
         let head: ParsedHead | null = null;
         let tree: ParsedTree | null = null;
         let compare: ParsedCompare = { changedFiles: [], commits: [], truncated: false };
 
         try {
           const apiBase = repoApiBase(target.repoKey);
-          sourceUrl = apiBase;
           const options = { limit: rateLimit, headers };
           head = parseHead(
             await requestJson(`${apiBase}/commits/HEAD`, options),

@@ -1,3 +1,4 @@
+import { githubRepoSnapshotSourceKey, type RepoTarget } from '@kritt-radar/collectors';
 import { PrismaClient } from '@kritt-radar/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -46,6 +47,10 @@ config-aave-target:
   match:
     - repo: github.com/aave/v3
 `;
+
+function snapshotSource(target: RepoTarget): string {
+  return githubRepoSnapshotSourceKey(target);
+}
 
 async function currentDatabaseName(): Promise<string> {
   const rows = await prisma.$queryRaw<Array<{ name: string }>>`SELECT current_database() AS name`;
@@ -191,9 +196,9 @@ describe('materializeCatalogFoundation', () => {
   it('returns per-invocation counts and deterministically materializes exact and fallback entities', async () => {
     const result = await materializeCatalogFoundation(prisma, aliasesYaml, now);
 
-    expect(result).toEqual({ programs: 2, scopes: 2, entities: 3, reports: 2, candidates: 1 });
+    expect(result).toEqual({ programs: 2, scopes: 2, entities: 2, reports: 2, candidates: 0 });
     expect(await countDroppedContestPrograms(prisma)).toBe(1);
-    expect(await prisma.entity.count()).toBe(4);
+    expect(await prisma.entity.count()).toBe(3);
     expect(await prisma.entityAlias.count()).toBe(1);
     expect(await prisma.program.count({ where: { entityId: null } })).toBe(0);
 
@@ -213,6 +218,10 @@ describe('materializeCatalogFoundation', () => {
       slug: 'repo-github-com-aave-v3',
       canonicalName: 'aave/v3',
     });
+    const aaveReport = await prisma.auditReport.findUniqueOrThrow({
+      where: { reportUrl: 'https://reports.example/aave-v3-review.pdf' },
+    });
+    expect(aaveReport.entityId).toBe(aaveProgram.entityId);
 
     const firstCounts = await foundationCounts();
     expect(await materializeCatalogFoundation(prisma, aliasesYaml, now)).toEqual(result);
@@ -221,32 +230,261 @@ describe('materializeCatalogFoundation', () => {
 
   it('keeps a manually approved report link and candidate decision during fuzzy replay', async () => {
     await materializeCatalogFoundation(prisma, aliasesYaml, now);
-    const aaveProgram = await prisma.program.findUniqueOrThrow({
-      where: { platform_externalId: { platform: 'code4rena', externalId: 'aave-v3' } },
+    const fuzzyEntity = await prisma.entity.create({
+      data: { slug: 'protocol-a', canonicalName: 'protocol a' },
     });
-    const aaveReport = await prisma.auditReport.findUniqueOrThrow({
-      where: { reportUrl: 'https://reports.example/aave-v3-review.pdf' },
+    const longToken = 'a'.repeat(53);
+    const secondFuzzyEntity = await prisma.entity.create({
+      data: { slug: 'long-token-protocol', canonicalName: longToken },
+    });
+    await prisma.program.createMany({
+      data: [
+        {
+          entityId: fuzzyEntity.id,
+          platform: 'fixture',
+          externalId: 'protocol-a',
+          title: 'Protocol A',
+          url: 'https://programs.example/protocol-a',
+          kind: 'bounty',
+        },
+        {
+          entityId: secondFuzzyEntity.id,
+          platform: 'fixture',
+          externalId: 'long-token-protocol',
+          title: 'Long token protocol',
+          url: 'https://programs.example/long-token-protocol',
+          kind: 'bounty',
+        },
+      ],
+    });
+    await prisma.observation.create({
+      data: {
+        collectorId: 'audit-report-repos',
+        sourceUrl: 'https://reports.example/fuzzy-index',
+        fetchedAt: new Date(now.getTime() + 1_000),
+        contentHash: 'audit-fuzzy-protocol-a',
+        payload: [
+          {
+            firm: 'auditor',
+            projectHint: 'a protocol',
+            publishedAt: '2026-06-03T00:00:00.000Z',
+            reportUrl: 'https://reports.example/fuzzy-protocol-a.pdf',
+          },
+          {
+            firm: 'auditor',
+            projectHint: `${longToken} v2`,
+            publishedAt: '2026-06-03T00:00:00.000Z',
+            reportUrl: 'https://reports.example/fuzzy-long-token.pdf',
+          },
+        ],
+      },
+    });
+    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 2_000));
+
+    const fuzzyReport = await prisma.auditReport.findUniqueOrThrow({
+      where: { reportUrl: 'https://reports.example/fuzzy-protocol-a.pdf' },
     });
     const candidate = await prisma.mergeCandidate.findFirstOrThrow({
-      where: { leftEntityId: aaveReport.entityId, rightEntityId: aaveProgram.entityId! },
+      where: { leftEntityId: fuzzyReport.entityId, rightEntityId: fuzzyEntity.id },
     });
-    const decidedAt = new Date(now.getTime() + 1_000);
+    expect(candidate).toMatchObject({ status: 'pending', similarity: 0.84 });
+    expect(fuzzyReport.entityId).not.toBe(fuzzyEntity.id);
+    const secondFuzzyReport = await prisma.auditReport.findUniqueOrThrow({
+      where: { reportUrl: 'https://reports.example/fuzzy-long-token.pdf' },
+    });
+    const secondCandidate = await prisma.mergeCandidate.findFirstOrThrow({
+      where: {
+        leftEntityId: secondFuzzyReport.entityId,
+        rightEntityId: secondFuzzyEntity.id,
+      },
+    });
+    expect(secondCandidate.status).toBe('pending');
+    expect(secondCandidate.similarity).toBeCloseTo(0.6785714285714286);
+    expect(secondFuzzyReport.entityId).not.toBe(secondFuzzyEntity.id);
+
+    const decidedAt = new Date(now.getTime() + 3_000);
     await prisma.$transaction([
-      prisma.auditReport.update({ where: { id: aaveReport.id }, data: { entityId: aaveProgram.entityId! } }),
+      prisma.auditReport.update({ where: { id: fuzzyReport.id }, data: { entityId: fuzzyEntity.id } }),
       prisma.mergeCandidate.update({
         where: { id: candidate.id },
         data: { status: 'approved', decidedAt },
       }),
     ]);
 
-    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 2_000));
+    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 4_000));
 
-    expect((await prisma.auditReport.findUniqueOrThrow({ where: { id: aaveReport.id } })).entityId).toBe(
-      aaveProgram.entityId,
+    expect((await prisma.auditReport.findUniqueOrThrow({ where: { id: fuzzyReport.id } })).entityId).toBe(
+      fuzzyEntity.id,
     );
     expect(await prisma.mergeCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
       status: 'approved',
       decidedAt,
+    });
+  });
+
+  it('keeps ambiguous normalized identities provisional and pending', async () => {
+    const entities = await Promise.all([
+      prisma.entity.create({
+        data: { slug: 'ambiguous-protocol-one', canonicalName: 'Ambiguous Protocol' },
+      }),
+      prisma.entity.create({
+        data: { slug: 'ambiguous-protocol-two', canonicalName: 'ambiguous-protocol' },
+      }),
+    ]);
+    await prisma.program.createMany({
+      data: entities.map((entity, index) => ({
+        entityId: entity.id,
+        platform: 'fixture',
+        externalId: `ambiguous-${index}`,
+        title: `Ambiguous ${index}`,
+        url: `https://programs.example/ambiguous-${index}`,
+        kind: 'bounty',
+      })),
+    });
+    await prisma.observation.create({
+      data: {
+        collectorId: 'audit-report-repos',
+        sourceUrl: 'https://reports.example/ambiguous-index',
+        fetchedAt: new Date(now.getTime() + 1_000),
+        contentHash: 'audit-ambiguous-protocol',
+        payload: [{
+          firm: 'auditor',
+          projectHint: 'ambiguous-protocol',
+          publishedAt: '2026-06-04T00:00:00.000Z',
+          reportUrl: 'https://reports.example/ambiguous-protocol.pdf',
+        }],
+      },
+    });
+
+    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 2_000));
+
+    const report = await prisma.auditReport.findUniqueOrThrow({
+      where: { reportUrl: 'https://reports.example/ambiguous-protocol.pdf' },
+    });
+    expect(entities.map(({ id }) => id)).not.toContain(report.entityId);
+    expect(await prisma.mergeCandidate.findMany({
+      where: { leftEntityId: report.entityId, rightEntityId: { in: entities.map(({ id }) => id) } },
+      select: { status: true, similarity: true },
+      orderBy: { rightEntityId: 'asc' },
+    })).toEqual([
+      { status: 'pending', similarity: 1 },
+      { status: 'pending', similarity: 1 },
+    ]);
+  });
+
+  it('keeps explicit audit aliases ahead of normalized canonical identities', async () => {
+    const normalizedEntity = await prisma.entity.create({
+      data: { slug: 'normalized-uniswap-v4', canonicalName: 'Uniswap v4' },
+    });
+    await prisma.program.create({
+      data: {
+        entityId: normalizedEntity.id,
+        platform: 'fixture',
+        externalId: 'normalized-uniswap-v4',
+        title: 'Uniswap v4',
+        url: 'https://programs.example/normalized-uniswap-v4',
+        kind: 'bounty',
+      },
+    });
+
+    await materializeCatalogFoundation(prisma, aliasesYaml, now);
+
+    const [alias, report] = await Promise.all([
+      prisma.entityAlias.findUniqueOrThrow({
+        where: { kind_key: { kind: 'audit_hint', key: 'uniswap-v4' } },
+      }),
+      prisma.auditReport.findUniqueOrThrow({
+        where: { reportUrl: 'https://reports.example/uniswap-v4.pdf' },
+      }),
+    ]);
+    expect(report.entityId).toBe(alias.entityId);
+    expect(report.entityId).not.toBe(normalizedEntity.id);
+  });
+
+  it('auto-links a unique exact slug identity but never an empty normalized identity', async () => {
+    const [slugEntity, emptyEntity] = await Promise.all([
+      prisma.entity.create({
+        data: { slug: 'slug-only-protocol', canonicalName: 'Unrelated canonical identity' },
+      }),
+      prisma.entity.create({
+        data: { slug: 'noise-only-program', canonicalName: 'Audit Report' },
+      }),
+    ]);
+    await prisma.program.createMany({
+      data: [
+        {
+          entityId: slugEntity.id,
+          platform: 'fixture',
+          externalId: 'slug-only-protocol',
+          title: 'Slug only protocol',
+          url: 'https://programs.example/slug-only-protocol',
+          kind: 'bounty',
+        },
+        {
+          entityId: emptyEntity.id,
+          platform: 'fixture',
+          externalId: 'noise-only-program',
+          title: 'Noise only program',
+          url: 'https://programs.example/noise-only-program',
+          kind: 'bounty',
+        },
+      ],
+    });
+    await prisma.observation.create({
+      data: {
+        collectorId: 'audit-report-repos',
+        sourceUrl: 'https://reports.example/exact-slug-index',
+        fetchedAt: new Date(now.getTime() + 1_000),
+        contentHash: 'audit-exact-slug-and-empty',
+        payload: [
+          {
+            firm: 'auditor',
+            projectHint: 'slug-only-protocol',
+            publishedAt: '2026-06-05T00:00:00.000Z',
+            reportUrl: 'https://reports.example/slug-only-protocol.pdf',
+          },
+          {
+            firm: 'auditor',
+            projectHint: 'Security Assessment',
+            publishedAt: '2026-06-05T00:00:00.000Z',
+            reportUrl: 'https://reports.example/noise-only.pdf',
+          },
+        ],
+      },
+    });
+
+    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 2_000));
+
+    const [slugReport, emptyReport] = await Promise.all([
+      prisma.auditReport.findUniqueOrThrow({
+        where: { reportUrl: 'https://reports.example/slug-only-protocol.pdf' },
+      }),
+      prisma.auditReport.findUniqueOrThrow({
+        where: { reportUrl: 'https://reports.example/noise-only.pdf' },
+      }),
+    ]);
+    expect(slugReport.entityId).toBe(slugEntity.id);
+    expect(emptyReport.entityId).not.toBe(emptyEntity.id);
+  });
+
+  it('preserves manually enriched audit coverage during observation replay', async () => {
+    await materializeCatalogFoundation(prisma, aliasesYaml, now);
+    const report = await prisma.auditReport.findUniqueOrThrow({
+      where: { reportUrl: 'https://reports.example/aave-v3-review.pdf' },
+    });
+    await prisma.auditReport.update({
+      where: { id: report.id },
+      data: {
+        coveredCommit: 'manually-covered-commit',
+        coveredPaths: ['contracts/core/**', 'contracts/periphery/**'],
+      },
+    });
+
+    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 1_000));
+
+    expect(await prisma.auditReport.findUniqueOrThrow({ where: { id: report.id } })).toMatchObject({
+      coveredCommit: 'manually-covered-commit',
+      coveredPaths: ['contracts/core/**', 'contracts/periphery/**'],
     });
   });
 
@@ -438,7 +676,12 @@ describe('materializeRepoSignals', () => {
         {
           id: 'snapshot-a',
           collectorId: 'github-repo-snapshot',
-          sourceUrl: 'https://api.github.com/repos/uniswap/v4-core',
+          sourceUrl: snapshotSource({
+            repoKey: 'github.com/uniswap/v4-core',
+            pathGlobs: [],
+            lastAuditAt: '2026-07-15T00:00:00.000Z',
+            coveredCommit: 'base-a',
+          }),
           fetchedAt: now,
           contentHash: 'snapshot-a',
           payload: { ...uniswapPayload, headSha: 'ignored-tie' },
@@ -446,7 +689,12 @@ describe('materializeRepoSignals', () => {
         {
           id: 'snapshot-z',
           collectorId: 'github-repo-snapshot',
-          sourceUrl: 'https://api.github.com/repos/uniswap/v4-core',
+          sourceUrl: snapshotSource({
+            repoKey: 'github.com/uniswap/v4-core',
+            pathGlobs: [],
+            lastAuditAt: '2026-07-15T00:00:00.000Z',
+            coveredCommit: 'base-a',
+          }),
           fetchedAt: now,
           contentHash: 'snapshot-z',
           payload: uniswapPayload,
@@ -454,7 +702,12 @@ describe('materializeRepoSignals', () => {
         {
           id: 'snapshot-failed',
           collectorId: 'github-repo-snapshot',
-          sourceUrl: 'https://api.github.com/repos/aave/v3',
+          sourceUrl: snapshotSource({
+            repoKey: 'github.com/aave/v3',
+            pathGlobs: [],
+            lastAuditAt: '2026-06-02T00:00:00.000Z',
+            coveredCommit: 'aave-base',
+          }),
           fetchedAt: now,
           contentHash: 'snapshot-failed',
           payload: {
@@ -554,7 +807,12 @@ describe('materializeRepoSignals', () => {
         {
           id: 'snapshot-current-older',
           collectorId: 'github-repo-snapshot',
-          sourceUrl: 'https://api.github.com/repos/uniswap/v4-core',
+          sourceUrl: snapshotSource({
+            repoKey: 'github.com/uniswap/v4-core',
+            pathGlobs: [],
+            lastAuditAt: '2026-06-01T00:00:00.000Z',
+            coveredCommit: 'current-base',
+          }),
           fetchedAt: new Date(now.getTime() - 2_000),
           contentHash: 'snapshot-current-older',
           payload,
@@ -562,7 +820,12 @@ describe('materializeRepoSignals', () => {
         {
           id: 'snapshot-stale-newer',
           collectorId: 'github-repo-snapshot',
-          sourceUrl: 'https://api.github.com/repos/uniswap/v4-core',
+          sourceUrl: snapshotSource({
+            repoKey: 'github.com/uniswap/v4-core',
+            pathGlobs: [],
+            lastAuditAt: '2026-06-01T00:00:00.000Z',
+            coveredCommit: 'current-base',
+          }),
           fetchedAt: new Date(now.getTime() - 1_000),
           contentHash: 'snapshot-stale-newer',
           payload: {
@@ -574,7 +837,12 @@ describe('materializeRepoSignals', () => {
         {
           id: 'snapshot-foreign-source',
           collectorId: 'github-repo-snapshot',
-          sourceUrl: 'https://api.github.com/repos/other/protocol',
+          sourceUrl: snapshotSource({
+            repoKey: 'github.com/other/protocol',
+            pathGlobs: [],
+            lastAuditAt: '2026-06-01T00:00:00.000Z',
+            coveredCommit: 'current-base',
+          }),
           fetchedAt: now,
           contentHash: 'snapshot-foreign-source',
           payload,
@@ -582,7 +850,12 @@ describe('materializeRepoSignals', () => {
         {
           id: 'snapshot-invalid-aave',
           collectorId: 'github-repo-snapshot',
-          sourceUrl: 'https://api.github.com/repos/aave/v3',
+          sourceUrl: snapshotSource({
+            repoKey: 'github.com/aave/v3',
+            pathGlobs: [],
+            lastAuditAt: '2026-06-02T00:00:00.000Z',
+            coveredCommit: null,
+          }),
           fetchedAt: now,
           contentHash: 'snapshot-invalid-aave',
           payload: {
@@ -623,6 +896,152 @@ describe('materializeRepoSignals', () => {
     expect((await prisma.scope.findUniqueOrThrow({ where: { id: aaveScope.id } })).commitish).toBe(
       'previous-aave-head',
     );
+  });
+
+  it('isolates snapshots and evidence for two scopes on the same repository', async () => {
+    await materializeCatalogFoundation(prisma, aliasesYaml, now);
+    const firstScope = await prisma.scope.findFirstOrThrow({
+      where: { program: { platform: 'code4rena', externalId: 'uniswap-v4' } },
+    });
+    const firstReport = await prisma.auditReport.findUniqueOrThrow({
+      where: { reportUrl: 'https://reports.example/uniswap-v4.pdf' },
+    });
+    const secondEntity = await prisma.entity.create({
+      data: { slug: 'second-uniswap-scope', canonicalName: 'Second Uniswap scope' },
+    });
+    const secondProgram = await prisma.program.create({
+      data: {
+        entityId: secondEntity.id,
+        platform: 'fixture',
+        externalId: 'second-uniswap-scope',
+        title: 'Second Uniswap scope',
+        url: 'https://programs.example/second-uniswap-scope',
+        kind: 'bounty',
+      },
+    });
+    const secondScope = await prisma.scope.create({
+      data: {
+        programId: secondProgram.id,
+        kind: 'repo',
+        hardKey: 'github.com/uniswap/v4-core',
+        repoUrl: 'https://github.com/uniswap/v4-core',
+        pathGlobs: ['contracts/periphery/**'],
+      },
+    });
+    await prisma.$transaction([
+      prisma.scope.update({
+        where: { id: firstScope.id },
+        data: { pathGlobs: ['contracts/core/**'] },
+      }),
+      prisma.auditReport.update({
+        where: { id: firstReport.id },
+        data: { coveredCommit: 'core-base' },
+      }),
+      prisma.auditReport.create({
+        data: {
+          entityId: secondEntity.id,
+          firm: 'auditor',
+          publishedAt: new Date('2026-05-01T00:00:00.000Z'),
+          projectHint: 'second-uniswap-scope',
+          observationIds: ['audit-second-scope'],
+          reportUrl: 'https://reports.example/second-uniswap-scope.pdf',
+          coveredCommit: 'periphery-base',
+          coveredPaths: ['contracts/periphery/**'],
+        },
+      }),
+    ]);
+
+    const targets = await listRepoTargets(prisma);
+    const firstTarget = targets.find(({ scopeId }) => scopeId === firstScope.id)!;
+    const secondTarget = targets.find(({ scopeId }) => scopeId === secondScope.id)!;
+    expect(firstTarget.repoKey).toBe(secondTarget.repoKey);
+    expect(snapshotSource(firstTarget)).not.toBe(snapshotSource(secondTarget));
+
+    await prisma.observation.createMany({
+      data: [
+        {
+          id: 'snapshot-core-scope',
+          collectorId: 'github-repo-snapshot',
+          sourceUrl: snapshotSource(firstTarget),
+          fetchedAt: now,
+          contentHash: 'snapshot-core-scope',
+          payload: {
+            repoKey: firstTarget.repoKey,
+            cutoff: {
+              lastAuditAt: firstTarget.lastAuditAt,
+              baseCommit: firstTarget.coveredCommit,
+            },
+            headSha: 'core-head',
+            headAuthoredAt: '2026-08-01T00:00:00.000Z',
+            files: ['contracts/core/Pool.sol'],
+            totalLoc: 1000,
+            locMethod: 'estimated_from_bytes',
+            changedFiles: [{ path: 'contracts/core/Pool.sol', changedLoc: 100 }],
+            commits: ['core-change'],
+            complete: true,
+            truncated: false,
+            error: null,
+          },
+        },
+        {
+          id: 'snapshot-periphery-scope',
+          collectorId: 'github-repo-snapshot',
+          sourceUrl: snapshotSource(secondTarget),
+          fetchedAt: new Date(now.getTime() + 1_000),
+          contentHash: 'snapshot-periphery-scope',
+          payload: {
+            repoKey: secondTarget.repoKey,
+            cutoff: {
+              lastAuditAt: secondTarget.lastAuditAt,
+              baseCommit: secondTarget.coveredCommit,
+            },
+            headSha: 'periphery-head',
+            headAuthoredAt: '2026-08-02T00:00:00.000Z',
+            files: ['contracts/periphery/Router.sol'],
+            totalLoc: 2000,
+            locMethod: 'estimated_from_bytes',
+            changedFiles: [{ path: 'contracts/periphery/Router.sol', changedLoc: 400 }],
+            commits: ['periphery-change'],
+            complete: true,
+            truncated: false,
+            error: null,
+          },
+        },
+      ],
+    });
+
+    expect(await materializeRepoSignals(prisma, new Date(now.getTime() + 2_000))).toEqual({
+      scopes: 3,
+      noData: 1,
+    });
+    const [firstSignal, secondSignal] = await Promise.all([
+      prisma.signal.findUniqueOrThrow({
+        where: { scopeId_type: { scopeId: firstScope.id, type: 'audit_gap' } },
+      }),
+      prisma.signal.findUniqueOrThrow({
+        where: { scopeId_type: { scopeId: secondScope.id, type: 'audit_gap' } },
+      }),
+    ]);
+    expect(firstSignal).toMatchObject({
+      value: 0.6680104684941067,
+      observationIds: expect.arrayContaining(['snapshot-core-scope']),
+      evidence: expect.objectContaining({
+        headSha: 'core-head',
+        sinceCommit: 'core-base',
+        files: ['contracts/core/Pool.sol'],
+      }),
+    });
+    expect(firstSignal.observationIds).not.toContain('snapshot-periphery-scope');
+    expect(secondSignal).toMatchObject({
+      value: 0.7885336367522783,
+      observationIds: ['audit-second-scope', 'snapshot-periphery-scope'],
+      evidence: expect.objectContaining({
+        headSha: 'periphery-head',
+        sinceCommit: 'periphery-base',
+        files: ['contracts/periphery/Router.sol'],
+      }),
+    });
+    expect(secondSignal.observationIds).not.toContain('snapshot-core-scope');
   });
 });
 

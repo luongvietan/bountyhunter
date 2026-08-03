@@ -431,6 +431,50 @@ describe('GitHub repo snapshot requests', () => {
     });
   });
 
+  it('uses one stable logical source per complete target identity without changing fetch endpoints', async () => {
+    const targets: RepoTarget[] = [
+      target,
+      {
+        ...target,
+        pathGlobs: ['lib/**/*.sol'],
+        lastAuditAt: '2026-07-02T00:00:00.000Z',
+        coveredCommit: 'base111',
+      },
+      { ...target, pathGlobs: ['test/**/*.sol', 'src/**/*.sol', 'src/**/*.sol'] },
+      { ...target, pathGlobs: ['src/**/*.sol', 'test/**/*.sol'] },
+    ];
+    const requestedUrls: string[] = [];
+    const collector = makeGithubRepoSnapshots(
+      async () => targets,
+      async (url) => {
+        requestedUrls.push(url);
+        if (url.includes('/commits/HEAD')) return headFixture;
+        if (url.includes('/git/trees/')) return treeFixture;
+        if (url.includes('/compare/')) return compareFixture;
+        throw new Error(`unexpected request: ${url}`);
+      },
+    );
+    const observations = [];
+    for await (const observation of collector.fetch({
+      env: { GITHUB_TOKEN: 'github-secret' },
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    })) {
+      observations.push(observation);
+    }
+
+    expect(observations[0]!.sourceUrl).not.toBe(observations[1]!.sourceUrl);
+    expect(observations[2]!.sourceUrl).toBe(observations[3]!.sourceUrl);
+    for (const observation of observations) {
+      const source = new URL(observation.sourceUrl);
+      expect(source.origin + source.pathname).toBe('https://api.github.com/repos/acme/protocol');
+      expect(source.searchParams.get('kritt_target')).toMatch(/^[a-f0-9]{64}$/);
+    }
+    expect(requestedUrls.filter((url) => url.includes('/commits/HEAD'))).toEqual(
+      Array(4).fill('https://api.github.com/repos/acme/protocol/commits/HEAD'),
+    );
+    expect(requestedUrls.some((url) => url.includes('kritt_target'))).toBe(false);
+  });
+
   it('finds the latest commit at the audit date before comparing when no commit is covered', async () => {
     const datedTarget = { ...target, coveredCommit: null };
     const baseFixture = { ...headFixture, sha: 'dated-base' };
