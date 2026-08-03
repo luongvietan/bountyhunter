@@ -1,0 +1,21 @@
+{
+  "name": "kritt-radar",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "collect": "pnpm --filter @kritt-radar/worker exec tsx src/cli.ts collect",
+    "materialize": "pnpm --filter @kritt-radar/worker exec tsx src/cli.ts materialize",
+    "rank": "pnpm --filter @kritt-radar/worker exec tsx src/cli.ts rank"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}
