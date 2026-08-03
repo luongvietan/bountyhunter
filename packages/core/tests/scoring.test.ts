@@ -55,6 +55,32 @@ describe('score', () => {
     expect(r.usedSignals).toBe(0);
   });
 
+  it('confidence thấp làm giảm đóng góp, không chỉ là cổng chặn', () => {
+    // Nếu confidence chỉ chặn, hai trường hợp này bằng điểm nhau và một phỏng
+    // đoán mơ hồ leo lên ngang một phép đo chắc chắn.
+    const confident = score([sig('audit_gap', 1, 1), sig('freshness', 0, 1)], W).total;
+    const shaky = score([sig('audit_gap', 1, 0.35), sig('freshness', 0, 1)], W).total;
+    expect(shaky).toBeLessThan(confident);
+  });
+
+  it('bằng chứng đo được thắng phỏng đoán dù phỏng đoán có value cao hơn', () => {
+    // Đây là tình huống thật: 395 scope chưa rõ audit đoán 1.0 @ 0.35 đã chèn
+    // hết những scope đo được thật ra khỏi đầu bảng.
+    const measured = score([sig('audit_gap', 0.83, 0.7), sig('freshness', 0.24, 1)], W).total;
+    const guessed = score([sig('audit_gap', 1, 0.35), sig('freshness', 0.01, 1)], W).total;
+    expect(measured).toBeGreaterThan(guessed);
+  });
+
+  it('tín hiệu cùng độ tin cậy vẫn chia trọng số đều như cũ', () => {
+    const r = score([sig('audit_gap', 1, 0.5), sig('freshness', 0, 0.5)], W);
+    expect(r.total).toBeCloseTo(50, 6);
+  });
+
+  it('trọng số đã chuẩn hoá luôn cộng lại bằng 1', () => {
+    const r = score([sig('audit_gap', 0.4, 0.35), sig('freshness', 0.9, 1), sig('value_at_risk', 0.5, 0.6)], W);
+    expect(r.breakdown.reduce((a, b) => a + b.normalizedWeight, 0)).toBeCloseTo(1, 6);
+  });
+
   it('breakdown cộng lại đúng bằng tổng', () => {
     const r = score([sig('audit_gap', 0.8), sig('freshness', 0.3), sig('value_at_risk', 0.6)], W);
     const sum = r.breakdown.reduce((a, b) => a + b.contribution, 0);
