@@ -523,7 +523,16 @@ describe('materializeRepoSignals', () => {
     const report = await prisma.auditReport.findUniqueOrThrow({
       where: { reportUrl: 'https://reports.example/uniswap-v4.pdf' },
     });
-    await prisma.auditReport.update({ where: { id: report.id }, data: { coveredCommit: 'current-base' } });
+    await prisma.$transaction([
+      prisma.auditReport.update({
+        where: { id: report.id },
+        data: { coveredCommit: 'current-base' },
+      }),
+      prisma.scope.update({
+        where: { id: aaveScope.id },
+        data: { commitish: 'previous-aave-head' },
+      }),
+    ]);
 
     const payload = {
       repoKey: 'github.com/uniswap/v4-core',
@@ -578,7 +587,7 @@ describe('materializeRepoSignals', () => {
           payload: {
             repoKey: 'github.com/aave/v3',
             cutoff: { lastAuditAt: null, baseCommit: null },
-            headSha: null,
+            headSha: 'invalid-head',
             headAuthoredAt: null,
             files: [],
             totalLoc: 0,
@@ -610,5 +619,8 @@ describe('materializeRepoSignals', () => {
     expect(invalidSignal.confidence).toBe(0);
     expect(invalidSignal.evidence).toMatchObject({ reason: 'invalid_snapshot' });
     expect(invalidSignal.observationIds).toContain('snapshot-invalid-aave');
+    expect((await prisma.scope.findUniqueOrThrow({ where: { id: aaveScope.id } })).commitish).toBe(
+      'previous-aave-head',
+    );
   });
 });

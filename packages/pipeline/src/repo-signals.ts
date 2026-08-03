@@ -27,6 +27,14 @@ const RepoSnapshotSchema = z.object({
   truncated: z.boolean(),
   error: z.string().nullable(),
 }).superRefine((snapshot, ctx) => {
+  if ((snapshot.headSha === null) !== (snapshot.headAuthoredAt === null)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['headAuthoredAt'],
+      message: 'HEAD SHA and authored date must both be present or both be null',
+    });
+  }
+
   if (snapshot.complete && snapshot.truncated) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

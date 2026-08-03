@@ -122,8 +122,33 @@ describe('snapshotToAuditGap', () => {
       expected: target,
     },
     {
-      name: 'complete snapshot without HEAD',
+      name: 'healthy snapshot with authored date but no HEAD SHA',
       snapshot: { ...completeAudited, headSha: null },
+      expected: target,
+    },
+    {
+      name: 'healthy snapshot with HEAD SHA but no authored date',
+      snapshot: { ...completeAudited, headAuthoredAt: null },
+      expected: target,
+    },
+    {
+      name: 'failed snapshot with authored date but no HEAD SHA',
+      snapshot: {
+        ...completeAudited,
+        headSha: null,
+        complete: false,
+        error: 'compare failed',
+      },
+      expected: target,
+    },
+    {
+      name: 'failed snapshot with HEAD SHA but no authored date',
+      snapshot: {
+        ...completeAudited,
+        headAuthoredAt: null,
+        complete: false,
+        error: 'compare failed',
+      },
       expected: target,
     },
     {
