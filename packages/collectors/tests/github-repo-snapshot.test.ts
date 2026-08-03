@@ -106,6 +106,35 @@ describe('GitHub snapshot parsers', () => {
     });
   });
 
+  it('accepts omitted compare files as missing and truncated file evidence', () => {
+    expect(parseCompare({ total_commits: 0, commits: [] }, [])).toEqual({
+      changedFiles: [],
+      commits: [],
+      truncated: true,
+    });
+  });
+
+  it('keeps explicit empty compare files complete when commit evidence is complete', () => {
+    expect(parseCompare({ total_commits: 0, commits: [], files: [] }, [])).toEqual({
+      changedFiles: [],
+      commits: [],
+      truncated: false,
+    });
+  });
+
+  it('rejects malformed files when the compare field is explicitly present', () => {
+    expect(() =>
+      parseCompare(
+        {
+          total_commits: 0,
+          commits: [],
+          files: [{ filename: 'src/Pool.sol' }],
+        },
+        [],
+      ),
+    ).toThrow();
+  });
+
   it('marks a compare response truncated at the GitHub 300-file boundary', () => {
     const file = compareFixture.files[0]!;
     const boundaryFixture = {
@@ -514,6 +543,36 @@ describe('GitHub repo snapshot requests', () => {
     expect(observation.payload).toMatchObject({
       complete: false,
       truncated: true,
+    });
+  });
+
+  it.each([
+    {
+      name: 'omitted files',
+      compare: { total_commits: 0, commits: [] },
+      complete: false,
+      truncated: true,
+    },
+    {
+      name: 'explicit empty files',
+      compare: { total_commits: 0, commits: [], files: [] },
+      complete: true,
+      truncated: false,
+    },
+  ])('treats $name as valid compare evidence', async ({ compare, complete, truncated }) => {
+    const { observation } = await collectSnapshot(target, (url) => {
+      if (url.includes('/commits/HEAD')) return headFixture;
+      if (url.includes('/git/trees/')) return treeFixture;
+      if (url.includes('/compare/')) return compare;
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    expect(observation.health).toEqual({ ok: true });
+    expect(observation.payload).toMatchObject({
+      changedFiles: [],
+      complete,
+      truncated,
+      error: null,
     });
   });
 

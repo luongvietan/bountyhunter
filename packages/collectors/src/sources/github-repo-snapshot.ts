@@ -45,14 +45,16 @@ const CompareResponse = z
   .object({
     total_commits: NonNegativeInteger,
     commits: z.array(z.object({ sha: z.string().min(1) })),
-    files: z.array(
-      z.object({
-        filename: z.string().min(1),
-        additions: NonNegativeInteger,
-        deletions: NonNegativeInteger,
-        changes: NonNegativeInteger,
-      }),
-    ),
+    files: z
+      .array(
+        z.object({
+          filename: z.string().min(1),
+          additions: NonNegativeInteger,
+          deletions: NonNegativeInteger,
+          changes: NonNegativeInteger,
+        }),
+      )
+      .optional(),
   })
   .superRefine((response, ctx) => {
     if (response.total_commits < response.commits.length) {
@@ -63,7 +65,7 @@ const CompareResponse = z
       });
     }
 
-    response.files.forEach((file, index) => {
+    response.files?.forEach((file, index) => {
       if (file.changes !== file.additions + file.deletions) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -141,8 +143,9 @@ export function parseTree(raw: unknown, pathGlobs: readonly string[]): ParsedTre
 
 export function parseCompare(raw: unknown, pathGlobs: readonly string[]): ParsedCompare {
   const response = CompareResponse.parse(raw);
+  const files = response.files;
   return {
-    changedFiles: response.files
+    changedFiles: (files ?? [])
       .filter((file) => matchesGlobs(file.filename, pathGlobs))
       .map((file) => ({
         path: file.filename,
@@ -150,7 +153,9 @@ export function parseCompare(raw: unknown, pathGlobs: readonly string[]): Parsed
       })),
     commits: response.commits.map((commit) => commit.sha),
     truncated:
-      response.files.length >= 300 || response.commits.length < response.total_commits,
+      files === undefined ||
+      files.length >= 300 ||
+      response.commits.length < response.total_commits,
   };
 }
 
