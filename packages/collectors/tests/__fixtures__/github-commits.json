@@ -1,0 +1,15 @@
+[
+  {
+    "sha": "aaa111",
+    "commit": { "author": { "date": "2026-07-20T10:00:00Z" }, "message": "feat: add hook" },
+    "files": [
+      { "filename": "src/Hooks.sol", "additions": 120, "deletions": 4 },
+      { "filename": "README.md", "additions": 2, "deletions": 0 }
+    ]
+  },
+  {
+    "sha": "bbb222",
+    "commit": { "author": { "date": "2026-05-01T10:00:00Z" }, "message": "chore: bump" },
+    "files": [{ "filename": "package.json", "additions": 1, "deletions": 1 }]
+  }
+]

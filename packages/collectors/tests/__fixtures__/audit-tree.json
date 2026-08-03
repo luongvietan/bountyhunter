@@ -1,0 +1,8 @@
+{
+  "tree": [
+    { "path": "reports/2026-04-uniswap-v4.pdf", "type": "blob" },
+    { "path": "reports/2026-01-orbit-lending.pdf", "type": "blob" },
+    { "path": "reports/README.md", "type": "blob" },
+    { "path": "reports", "type": "tree" }
+  ]
+}

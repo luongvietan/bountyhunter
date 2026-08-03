@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    # Cổng 5433 để không đụng Postgres 5432 của Open-Kritt chạy song song.
+    ports: ['127.0.0.1:5433:5432']
+    environment:
+      POSTGRES_USER: kritt
+      POSTGRES_PASSWORD: kritt
+      POSTGRES_DB: kritt_radar
+    volumes: ['./pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U kritt -d kritt_radar']
+      interval: 5s
+      timeout: 3s
+      retries: 10

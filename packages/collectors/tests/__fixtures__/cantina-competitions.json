@@ -1,0 +1,22 @@
+{
+  "competitions": [
+    {
+      "id": "orbit-lending",
+      "name": "Orbit Lending",
+      "totalPrize": 120000,
+      "startDate": "2026-07-30T00:00:00.000Z",
+      "endDate": "2026-08-20T00:00:00.000Z",
+      "repositoryUrl": "https://github.com/orbit-fi/lending.git",
+      "state": "active"
+    },
+    {
+      "id": "archived-one",
+      "name": "Archived One",
+      "totalPrize": 30000,
+      "startDate": "2026-01-01T00:00:00.000Z",
+      "endDate": "2026-01-20T00:00:00.000Z",
+      "repositoryUrl": "https://github.com/foo/bar",
+      "state": "archived"
+    }
+  ]
+}

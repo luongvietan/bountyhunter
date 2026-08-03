@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Entity {
+  id            String        @id @default(cuid())
+  canonicalName String
+  slug          String        @unique
+  createdAt     DateTime      @default(now())
+  programs      Program[]
+  auditReports  AuditReport[]
+}
+
+model Program {
+  id          String    @id @default(cuid())
+  entity      Entity?   @relation(fields: [entityId], references: [id])
+  entityId    String?
+  platform    String
+  externalId  String
+  title       String
+  url         String
+  poolUsd     Decimal?  @db.Decimal(20, 2)
+  kind        String
+  publishedAt DateTime?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  status      String    @default("open")
+  scopes      Scope[]
+
+  @@unique([platform, externalId])
+  @@index([entityId])
+}
+
+model Scope {
+  id        String   @id @default(cuid())
+  program   Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  programId String
+  kind      String
+  /// Khoá chuẩn từ normalizeRepoUrl / normalizeChainAddress. Null = không có khoá cứng.
+  hardKey   String?
+  repoUrl   String?
+  commitish String?
+  pathGlobs String[]
+  chain     String?
+  address   String?
+  signals   Signal[]
+  scores    Score[]
+
+  @@index([programId])
+  @@index([hardKey])
+}
+
+model AuditReport {
+  id            String   @id @default(cuid())
+  entity        Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entityId      String
+  firm          String
+  publishedAt   DateTime
+  reportUrl     String
+  coveredCommit String?
+  coveredPaths  String[]
+
+  @@index([entityId, publishedAt])
+}
+
+model Observation {
+  id          String   @id @default(cuid())
+  collectorId String
+  sourceUrl   String
+  fetchedAt   DateTime @default(now())
+  payload     Json
+  contentHash String
+
+  /// Khiến việc chạy lại collector là idempotent: nội dung không đổi thì không
+  /// sinh dòng mới, nên so hash giữa hai lần fetch phát hiện được scope mở rộng.
+  @@unique([collectorId, sourceUrl, contentHash])
+  @@index([collectorId, fetchedAt])
+}
+
+model Signal {
+  id             String   @id @default(cuid())
+  scope          Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  scopeId        String
+  type           String
+  value          Float
+  confidence     Float
+  evidence       Json
+  observationIds String[]
+  computedAt     DateTime @default(now())
+
+  @@unique([scopeId, type])
+  @@index([scopeId])
+}
+
+model Score {
+  id             String   @id @default(cuid())
+  scope          Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  scopeId        String
+  total          Float
+  breakdown      Json
+  weightsVersion String
+  computedAt     DateTime @default(now())
+
+  @@unique([scopeId, weightsVersion])
+  @@index([total])
+}
+
+model CollectorRun {
+  id          String    @id @default(cuid())
+  collectorId String
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  status      String
+  itemCount   Int       @default(0)
+  error       String?
+
+  @@index([collectorId, startedAt])
+}

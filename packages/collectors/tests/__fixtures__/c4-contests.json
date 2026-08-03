@@ -1,0 +1,23 @@
+[
+  {
+    "contestid": 412,
+    "title": "Acme Vault",
+    "sponsor": "Acme",
+    "start_time": "2026-07-28T14:00:00Z",
+    "end_time": "2026-08-04T14:00:00Z",
+    "amount": "$100,000 USDC",
+    "repo": "https://github.com/code-423n4/2026-07-acme",
+    "findingsRepo": "https://github.com/code-423n4/2026-07-acme-findings",
+    "hide": false
+  },
+  {
+    "contestid": 400,
+    "title": "Hidden Contest",
+    "sponsor": "Nope",
+    "start_time": "2026-06-01T14:00:00Z",
+    "end_time": "2026-06-08T14:00:00Z",
+    "amount": "$50,000 USDC",
+    "repo": "",
+    "hide": true
+  }
+]

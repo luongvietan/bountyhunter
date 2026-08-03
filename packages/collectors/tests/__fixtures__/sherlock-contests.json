@@ -1,0 +1,21 @@
+[
+  {
+    "id": 771,
+    "title": "Zephyr Perps",
+    "short_description": "Perpetuals exchange",
+    "prize_pool": 75000,
+    "starts_at": 1785312000,
+    "ends_at": 1785916800,
+    "repo_urls": ["https://github.com/zephyr-fi/perps-core"],
+    "status": "RUNNING"
+  },
+  {
+    "id": 500,
+    "title": "Draft Contest",
+    "prize_pool": 0,
+    "starts_at": 1780000000,
+    "ends_at": 1780600000,
+    "repo_urls": [],
+    "status": "DRAFT"
+  }
+]
