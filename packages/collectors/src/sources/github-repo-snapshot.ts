@@ -8,35 +8,71 @@ import {
 } from '../types.js';
 import { matchesGlobs } from './github-repo-activity.js';
 
+const NonNegativeInteger = z.number().finite().int().nonnegative();
+
 const HeadResponse = z.object({
   sha: z.string().min(1),
   commit: z.object({
-    author: z.object({ date: z.string().min(1) }),
+    author: z.object({ date: z.string().datetime({ offset: true }) }),
     tree: z.object({ sha: z.string().min(1) }),
   }),
 });
 
 const TreeResponse = z.object({
   tree: z.array(
-    z.object({
-      path: z.string(),
-      type: z.string(),
-      size: z.number().nonnegative().optional(),
-    }),
+    z.discriminatedUnion('type', [
+      z.object({
+        path: z.string().min(1),
+        type: z.literal('blob'),
+        size: NonNegativeInteger,
+      }),
+      z.object({
+        path: z.string().min(1),
+        type: z.literal('tree'),
+        size: NonNegativeInteger.optional(),
+      }),
+      z.object({
+        path: z.string().min(1),
+        type: z.literal('commit'),
+        size: NonNegativeInteger.optional(),
+      }),
+    ]),
   ),
   truncated: z.boolean(),
 });
 
-const CompareResponse = z.object({
-  commits: z.array(z.object({ sha: z.string().min(1) })),
-  files: z.array(
-    z.object({
-      filename: z.string(),
-      additions: z.number().nonnegative(),
-      deletions: z.number().nonnegative(),
-    }),
-  ),
-});
+const CompareResponse = z
+  .object({
+    total_commits: NonNegativeInteger,
+    commits: z.array(z.object({ sha: z.string().min(1) })),
+    files: z.array(
+      z.object({
+        filename: z.string().min(1),
+        additions: NonNegativeInteger,
+        deletions: NonNegativeInteger,
+        changes: NonNegativeInteger,
+      }),
+    ),
+  })
+  .superRefine((response, ctx) => {
+    if (response.total_commits < response.commits.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['total_commits'],
+        message: 'total_commits cannot be lower than the returned commit count',
+      });
+    }
+
+    response.files.forEach((file, index) => {
+      if (file.changes !== file.additions + file.deletions) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['files', index, 'changes'],
+          message: 'changes must equal additions plus deletions',
+        });
+      }
+    });
+  });
 
 const BaseCommitResponse = z.array(z.object({ sha: z.string().min(1) })).min(1);
 
@@ -96,9 +132,6 @@ export function parseTree(raw: unknown, pathGlobs: readonly string[]): ParsedTre
 
   for (const node of response.tree) {
     if (node.type !== 'blob' || !matchesGlobs(node.path, pathGlobs)) continue;
-    if (node.size === undefined) {
-      throw new Error(`GitHub tree blob is missing size: ${node.path}`);
-    }
     files.push(node.path);
     totalBytes += node.size;
   }
@@ -116,7 +149,8 @@ export function parseCompare(raw: unknown, pathGlobs: readonly string[]): Parsed
         changedLoc: file.additions + file.deletions,
       })),
     commits: response.commits.map((commit) => commit.sha),
-    truncated: response.files.length >= 300,
+    truncated:
+      response.files.length >= 300 || response.commits.length < response.total_commits,
   };
 }
 
@@ -131,12 +165,24 @@ const rateLimit = { rps: 2, burst: 5 };
 const defaultGithubJsonFetcher: GithubJsonFetcher = (url, options) =>
   fetchJson<unknown>(url, options);
 
+const GithubOwner = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const GithubRepo = /^[A-Za-z0-9._-]{1,100}$/;
+
 function repoApiBase(repoKey: string): string {
   const [host, owner, repo, ...extra] = repoKey.split('/');
-  if (host !== 'github.com' || !owner || !repo || extra.length > 0) {
+  if (
+    host !== 'github.com' ||
+    !owner ||
+    !repo ||
+    extra.length > 0 ||
+    !GithubOwner.test(owner) ||
+    !GithubRepo.test(repo) ||
+    repo === '.' ||
+    repo === '..'
+  ) {
     throw new Error(`invalid GitHub repo key: ${repoKey}`);
   }
-  return `https://api.github.com/repos/${owner}/${repo}`;
+  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 }
 
 export function makeGithubRepoSnapshots(
@@ -160,7 +206,7 @@ export function makeGithubRepoSnapshots(
 
       for (const target of targets) {
         let baseCommit = target.coveredCommit;
-        let sourceUrl = `https://${target.repoKey}`;
+        let sourceUrl = 'https://api.github.com/';
         let head: ParsedHead | null = null;
         let tree: ParsedTree | null = null;
         let compare: ParsedCompare = { changedFiles: [], commits: [], truncated: false };
