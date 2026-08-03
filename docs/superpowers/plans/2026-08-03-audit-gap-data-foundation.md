@@ -124,15 +124,17 @@ Run: `pnpm --filter @kritt-radar/db exec prisma migrate status`
 
 Expected: schema changes are not represented by a migration.
 
-- [ ] **Step 3: Generate and inspect migration**
+- [ ] **Step 3: Generate migration without applying it**
 
-Run: `pnpm --filter @kritt-radar/db exec prisma migrate dev --name audit_gap_foundation`
+Run: `pnpm --filter @kritt-radar/db exec prisma migrate dev --create-only --name audit_gap_foundation`
 
 Inspect the SQL. It must create both tables, relations and indexes; add
 `projectHint`/`observationIds` with safe backfills before making them NOT NULL;
 and add the unique index on `AuditReport.reportUrl`.
 
-- [ ] **Step 4: Regenerate and validate client**
+- [ ] **Step 4: Apply migration, regenerate and validate client**
+
+Run: `pnpm --filter @kritt-radar/db exec prisma migrate deploy`
 
 Run: `pnpm --filter @kritt-radar/db run generate`
 
@@ -312,8 +314,8 @@ materializeCatalogFoundation(prisma: PrismaClient, aliasesYaml: string, now: Dat
 
 - [ ] **Step 1: Write failing PostgreSQL integration test**
 
-The test seeds one Uniswap program repo, one exact alias and audit observations
-for `uniswap-v4` plus `aave-v3-review`. After materialization assert:
+The test seeds Uniswap and Aave program repos, one exact Uniswap alias and audit
+observations for `uniswap-v4` plus `aave-v3-review`. After materialization assert:
 
 ```ts
 expect(await prisma.entityAlias.count()).toBe(1);
