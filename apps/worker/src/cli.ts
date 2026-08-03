@@ -6,55 +6,104 @@ import {
   c4Contests,
   cantinaCompetitions,
   immunefiPrograms,
+  makeGithubRepoSnapshots,
   runCollector,
   sherlockContests,
+  type Collector,
+  type CollectorRunResult,
 } from '@kritt-radar/collectors';
 import { prisma, saveObservations } from '@kritt-radar/db';
 import { rankScopes, type ScopeSignals } from '@kritt-radar/pipeline';
-import { countDroppedContestPrograms, materializeCatalogFoundation } from './foundation.js';
+import {
+  countDroppedContestPrograms,
+  listRepoTargets,
+  materializeCatalogFoundation,
+  materializeRepoSignals,
+} from './foundation.js';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
+const CATALOG_COLLECTORS: readonly Collector[] = [
+  c4Contests,
+  sherlockContests,
+  cantinaCompetitions,
+  immunefiPrograms,
+  auditReportRepos,
+];
 
-async function collect(): Promise<void> {
-  const collectors = [
-    c4Contests,
-    sherlockContests,
-    cantinaCompetitions,
-    immunefiPrograms,
-    auditReportRepos,
-  ];
-
-  for (const c of collectors) {
-    const run = await runCollector(c, {
-      env: process.env,
-      save: (items) => saveObservations(items),
-    });
-    await prisma.collectorRun.create({
-      data: {
-        collectorId: run.collectorId,
-        startedAt: run.startedAt,
-        finishedAt: run.finishedAt,
-        status: run.status,
-        itemCount: run.itemCount,
-        error: run.error ?? null,
-      },
-    });
-    const detail = run.error ? `  (${run.error})` : '';
-    console.log(
-      `${run.collectorId.padEnd(24)} ${run.status.padEnd(8)} ${run.itemCount} new${detail}`,
-    );
-  }
+export interface SyncDependencies {
+  collectCatalog: () => Promise<unknown>;
+  materializeCatalog: () => Promise<unknown>;
+  collectGithub: () => Promise<unknown>;
+  materializeSignals: () => Promise<unknown>;
+  rank: () => Promise<unknown>;
 }
 
-async function materialize(): Promise<void> {
+/**
+ * Run each stage in dependency order. Collector statuses, including `partial`
+ * and `error`, are recorded results and do not interrupt later materialization;
+ * a rejected stage is a hard infrastructure error and aborts the sync.
+ */
+export async function sync(deps: SyncDependencies): Promise<void> {
+  await deps.collectCatalog();
+  await deps.materializeCatalog();
+  await deps.collectGithub();
+  await deps.materializeSignals();
+  await deps.rank();
+}
+
+async function recordCollectorRun(run: CollectorRunResult, phase: 'catalog' | 'github'): Promise<void> {
+  await prisma.collectorRun.create({
+    data: {
+      collectorId: run.collectorId,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      status: run.status,
+      itemCount: run.itemCount,
+      error: run.error ?? null,
+    },
+  });
+  const detail = run.error ? `  (${run.error})` : '';
+  console.log(
+    `[${phase}] ${run.collectorId.padEnd(24)} ${run.status.padEnd(8)} ${run.itemCount} new${detail}`,
+  );
+}
+
+async function collectOne(collector: Collector, phase: 'catalog' | 'github'): Promise<CollectorRunResult> {
+  const run = await runCollector(collector, {
+    env: process.env,
+    save: (items) => saveObservations(items),
+  });
+  await recordCollectorRun(run, phase);
+  return run;
+}
+
+async function collectCatalog(): Promise<CollectorRunResult[]> {
+  const runs: CollectorRunResult[] = [];
+  for (const collector of CATALOG_COLLECTORS) {
+    runs.push(await collectOne(collector, 'catalog'));
+  }
+  return runs;
+}
+
+async function materializeCatalog(): Promise<void> {
   const aliasesYaml = await readFile(resolve(ROOT, 'config/aliases.yml'), 'utf8');
   const droppedNoRepo = await countDroppedContestPrograms(prisma);
   const result = await materializeCatalogFoundation(prisma, aliasesYaml, new Date());
   console.log(
-    `foundation: ${result.programs} programs / ${result.scopes} scopes / ` +
+    `[catalog] foundation: ${result.programs} programs / ${result.scopes} scopes / ` +
       `${result.entities} entities / ${result.reports} reports / ${result.candidates} candidates` +
       (droppedNoRepo > 0 ? `  (${droppedNoRepo} dropped: no repo in list endpoint)` : ''),
   );
+}
+
+async function collectGithub(): Promise<CollectorRunResult> {
+  const collector = makeGithubRepoSnapshots(() => listRepoTargets(prisma));
+  return collectOne(collector, 'github');
+}
+
+async function materializeSignals(): Promise<void> {
+  const result = await materializeRepoSignals(prisma, new Date());
+  console.log(`[signals] audit_gap: ${result.scopes} scopes / ${result.noData} no data`);
 }
 
 async function rank(): Promise<void> {
@@ -88,16 +137,37 @@ async function rank(): Promise<void> {
   console.log(`\nweights: ${weights.version}   scopes: ${ranked.length}\n`);
 }
 
-const command = process.argv[2];
+const runtimeDependencies: SyncDependencies = {
+  collectCatalog,
+  materializeCatalog,
+  collectGithub,
+  materializeSignals,
+  rank,
+};
 
-try {
-  if (command === 'collect') await collect();
-  else if (command === 'materialize') await materialize();
+async function runCommand(command: string | undefined): Promise<void> {
+  if (command === 'collect-catalog' || command === 'collect') await collectCatalog();
+  else if (command === 'materialize-catalog' || command === 'materialize') await materializeCatalog();
+  else if (command === 'collect-github') await collectGithub();
+  else if (command === 'materialize-signals') await materializeSignals();
+  else if (command === 'sync') await sync(runtimeDependencies);
   else if (command === 'rank') await rank();
   else {
-    console.error('usage: cli.ts <collect|materialize|rank>');
+    console.error(
+      'usage: cli.ts <collect-catalog|materialize-catalog|collect-github|materialize-signals|sync|rank>\n' +
+        'compatibility aliases: collect=collect-catalog, materialize=materialize-catalog',
+    );
     process.exitCode = 1;
   }
-} finally {
-  await prisma.$disconnect();
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
+  try {
+    await runCommand(process.argv[2]);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  } finally {
+    await prisma.$disconnect();
+  }
 }

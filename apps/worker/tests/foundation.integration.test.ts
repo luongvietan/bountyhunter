@@ -7,6 +7,7 @@ import {
   materializeRepoSignals,
 } from '../src/foundation.js';
 import { withSafeIntegrationDatabase } from './integration-database.js';
+import { sync } from '../src/cli.js';
 
 const prisma = new PrismaClient();
 const now = new Date('2026-08-03T12:00:00.000Z');
@@ -622,5 +623,78 @@ describe('materializeRepoSignals', () => {
     expect((await prisma.scope.findUniqueOrThrow({ where: { id: aaveScope.id } })).commitish).toBe(
       'previous-aave-head',
     );
+  });
+});
+
+describe('sync', () => {
+  it('runs the two-phase catalog and GitHub stages in exact dependency order', async () => {
+    const calls: string[] = [];
+    const stage = (name: string) => async () => {
+      calls.push(name);
+    };
+
+    await sync({
+      collectCatalog: stage('collect-catalog'),
+      materializeCatalog: stage('materialize-catalog'),
+      collectGithub: stage('collect-github'),
+      materializeSignals: stage('materialize-signals'),
+      rank: stage('rank'),
+    });
+
+    expect(calls).toEqual([
+      'collect-catalog',
+      'materialize-catalog',
+      'collect-github',
+      'materialize-signals',
+      'rank',
+    ]);
+  });
+
+  it('continues materialization and ranking after a partial GitHub run', async () => {
+    const calls: string[] = [];
+    const stage = (name: string) => async () => {
+      calls.push(name);
+    };
+
+    await sync({
+      collectCatalog: stage('collect-catalog'),
+      materializeCatalog: stage('materialize-catalog'),
+      collectGithub: async () => {
+        calls.push('collect-github:partial');
+        return { status: 'partial' as const };
+      },
+      materializeSignals: stage('materialize-signals'),
+      rank: stage('rank'),
+    });
+
+    expect(calls).toEqual([
+      'collect-catalog',
+      'materialize-catalog',
+      'collect-github:partial',
+      'materialize-signals',
+      'rank',
+    ]);
+  });
+
+  it('rejects a hard stage error and does not run later stages', async () => {
+    const calls: string[] = [];
+    const hardError = new Error('catalog materialization failed');
+    const stage = (name: string) => async () => {
+      calls.push(name);
+    };
+
+    await expect(
+      sync({
+        collectCatalog: stage('collect-catalog'),
+        materializeCatalog: async () => {
+          calls.push('materialize-catalog');
+          throw hardError;
+        },
+        collectGithub: stage('collect-github'),
+        materializeSignals: stage('materialize-signals'),
+        rank: stage('rank'),
+      }),
+    ).rejects.toBe(hardError);
+    expect(calls).toEqual(['collect-catalog', 'materialize-catalog']);
   });
 });

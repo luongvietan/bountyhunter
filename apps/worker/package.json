@@ -6,6 +6,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "cli": "tsx --env-file=../../.env src/cli.ts",
+    "collect-catalog": "pnpm run cli collect-catalog",
+    "materialize-catalog": "pnpm run cli materialize-catalog",
+    "collect-github": "pnpm run cli collect-github",
+    "materialize-signals": "pnpm run cli materialize-signals",
+    "sync": "pnpm run cli sync",
     "test:integration": "vitest run --config ../../vitest.integration.config.ts"
   },
   "dependencies": {

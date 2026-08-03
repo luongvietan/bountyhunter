@@ -10,6 +10,11 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "migrate": "pnpm --filter @kritt-radar/db run migrate",
+    "collect-catalog": "pnpm --filter @kritt-radar/worker run cli collect-catalog",
+    "materialize-catalog": "pnpm --filter @kritt-radar/worker run cli materialize-catalog",
+    "collect-github": "pnpm --filter @kritt-radar/worker run cli collect-github",
+    "materialize-signals": "pnpm --filter @kritt-radar/worker run cli materialize-signals",
+    "sync": "pnpm build && pnpm --filter @kritt-radar/worker run cli sync",
     "collect": "pnpm --filter @kritt-radar/worker run cli collect",
     "materialize": "pnpm --filter @kritt-radar/worker run cli materialize",
     "rank": "pnpm --filter @kritt-radar/worker run cli rank"
