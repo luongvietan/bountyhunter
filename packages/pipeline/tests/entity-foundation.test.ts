@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as entityFoundation from '../src/entity-foundation.js';
+import * as pipeline from '../src/index.js';
 import {
   auditEntitySeed,
   normalizeIdentityText,
@@ -25,6 +26,21 @@ describe('entity identity foundation', () => {
 
   it('derives a stable entity seed from an audit project hint', () => {
     expect(auditEntitySeed('uniswap-v4')).toEqual({
+      slug: 'audit-uniswap-v4',
+      canonicalName: 'uniswap v4',
+    });
+  });
+
+  it('derives the same audit seed for equivalent noisy and accented hints', () => {
+    const noisySeed = auditEntitySeed('Üniswap V4 Audit Report');
+    const normalizedSeed = auditEntitySeed('uniswap-v4');
+
+    expect(noisySeed).toEqual({ slug: 'audit-uniswap-v4', canonicalName: 'uniswap v4' });
+    expect(normalizedSeed).toEqual(noisySeed);
+  });
+
+  it('exports the entity foundation API from the pipeline barrel', () => {
+    expect(pipeline.auditEntitySeed('uniswap-v4')).toEqual({
       slug: 'audit-uniswap-v4',
       canonicalName: 'uniswap v4',
     });

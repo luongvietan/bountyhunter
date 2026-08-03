@@ -83,3 +83,61 @@ Result: exit 0; no whitespace errors.
 
 None. This task intentionally does not decide match thresholds or merge
 entities; it only supplies deterministic candidates for later orchestration.
+
+## Fix round 1: audit seed consistency and public barrel export
+
+Reviewer findings addressed:
+
+- **P1:** `auditEntitySeed` now forms its slug from `canonicalName`, which is
+  the normalized, noise-free identity text. Equivalent hints such as
+  `Üniswap V4 Audit Report` and `uniswap-v4` therefore return the same slug
+  and seed.
+- **P2:** Added a behavior test that calls `auditEntitySeed` through
+  `packages/pipeline/src/index.ts`, proving the public pipeline barrel exports
+  the entity-foundation API.
+
+### TDD evidence
+
+Added the noisy/accented equivalence regression test before the implementation
+change, then ran:
+
+```text
+pnpm vitest run packages/pipeline/tests/entity-foundation.test.ts
+```
+
+Result: exit 1, expected RED. The received seed had
+`slug: 'audit-uniswap-v4-audit-report'` while the equivalent normalized hint
+had `slug: 'audit-uniswap-v4'`.
+
+Changed only `auditEntitySeed` to call `slugify(canonicalName)` rather than
+`slugify(projectHint)`.
+
+### Verification
+
+```text
+pnpm vitest run packages/pipeline/tests/entity-foundation.test.ts
+```
+
+Result: exit 0; 1 file and 8 tests passed.
+
+```text
+pnpm vitest run packages/pipeline/tests
+```
+
+Result: exit 0; 6 files and 40 tests passed.
+
+```text
+pnpm typecheck
+```
+
+Result: exit 0.
+
+### Self-review and concerns
+
+- The slug and canonical name now share precisely the same semantic token
+  source, so punctuation, case, diacritics, and required noise tokens cannot
+  cause equivalent audit hints to diverge.
+- The public-barrel assertion invokes the exported function and asserts its
+  consumer-visible seed, rather than merely checking a symbol exists.
+- No concerns; the change remains pure and does not introduce entity updates
+  or merges.

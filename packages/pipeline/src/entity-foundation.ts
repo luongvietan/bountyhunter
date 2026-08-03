@@ -76,7 +76,7 @@ export function auditEntitySeed(projectHint: string): EntitySeed {
   const canonicalName = normalizeIdentityText(projectHint);
 
   return {
-    slug: `audit-${slugify(projectHint)}`,
+    slug: `audit-${slugify(canonicalName)}`,
     canonicalName,
   };
 }
