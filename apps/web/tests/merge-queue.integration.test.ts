@@ -39,6 +39,7 @@ async function createCandidate(input: {
   status: 'pending' | 'approved' | 'rejected';
   similarity: number;
   createdAt: Date;
+  decidedAt?: Date;
   reason?: object;
   withEvidence?: boolean;
 }): Promise<void> {
@@ -51,43 +52,102 @@ async function createCandidate(input: {
       slug: `${input.id}-target`,
       canonicalName: `${input.id} target`,
       programs: {
-        create: {
-          platform: 'immunefi',
-          externalId: `${input.id}-program`,
-          title: `${input.id} program`,
-          url: `https://programs.example/${input.id}`,
-          kind: 'bounty',
-          scopes: input.withEvidence
-            ? { create: { kind: 'repo', hardKey: 'github.com/aave/aave-v3-origin', pathGlobs: [] } }
-            : undefined,
-        },
-      },
-      auditReports: input.withEvidence
-        ? {
-            create: {
-              firm: 'Trail of Bits',
-              publishedAt: new Date('2026-07-01T00:00:00.000Z'),
-              projectHint: 'target-report',
-              observationIds: [],
-              reportUrl: `https://reports.example/${input.id}-target`,
-              coveredPaths: [],
+        create: input.withEvidence
+          ? [
+              {
+                id: `${input.id}-program-z`,
+                platform: 'immunefi',
+                externalId: `${input.id}-program-z`,
+                title: 'Aave V3',
+                url: `https://programs.example/${input.id}-z`,
+                kind: 'bounty',
+                scopes: {
+                  create: {
+                    id: `${input.id}-scope-z`,
+                    kind: 'repo',
+                    hardKey: 'github.com/aave/aave-v3-origin',
+                    pathGlobs: [],
+                  },
+                },
+              },
+              {
+                id: `${input.id}-program-a`,
+                platform: 'code4rena',
+                externalId: `${input.id}-program-a`,
+                title: 'Aave Governance',
+                url: `https://programs.example/${input.id}-a`,
+                kind: 'contest',
+                scopes: {
+                  create: {
+                    id: `${input.id}-scope-a`,
+                    kind: 'repo',
+                    hardKey: 'github.com/aave/aave-governance-v3',
+                    pathGlobs: [],
+                  },
+                },
+              },
+              {
+                id: `${input.id}-program-m`,
+                platform: 'immunefi',
+                externalId: `${input.id}-program-m`,
+                title: 'Aave V3',
+                url: `https://programs.example/${input.id}-m`,
+                kind: 'bounty',
+                scopes: {
+                  create: {
+                    id: `${input.id}-scope-m`,
+                    kind: 'repo',
+                    hardKey: 'github.com/aave/aave-v3-origin',
+                    pathGlobs: [],
+                  },
+                },
+              },
+            ]
+          : {
+              platform: 'immunefi',
+              externalId: `${input.id}-program`,
+              title: `${input.id} program`,
+              url: `https://programs.example/${input.id}`,
+              kind: 'bounty',
             },
-          }
-        : undefined,
+      },
     },
   });
 
   if (input.withEvidence) {
-    await prisma.auditReport.create({
-      data: {
-        entityId: source.id,
-        firm: 'OpenZeppelin',
-        publishedAt: new Date('2026-07-02T00:00:00.000Z'),
-        projectHint: 'aave-v3-review',
-        observationIds: [],
-        reportUrl: `https://reports.example/${input.id}-source`,
-        coveredPaths: [],
-      },
+    await prisma.auditReport.createMany({
+      data: [
+        {
+          id: `${input.id}-report-z`,
+          entityId: source.id,
+          firm: 'OpenZeppelin',
+          publishedAt: new Date('2026-07-03T00:00:00.000Z'),
+          projectHint: 'aave-v3-security',
+          observationIds: [],
+          reportUrl: `https://reports.example/${input.id}-z`,
+          coveredPaths: [],
+        },
+        {
+          id: `${input.id}-report-a`,
+          entityId: source.id,
+          firm: 'Trail of Bits',
+          publishedAt: new Date('2026-07-01T00:00:00.000Z'),
+          projectHint: 'aave-v3-review',
+          observationIds: [],
+          reportUrl: `https://reports.example/${input.id}-a`,
+          coveredPaths: [],
+        },
+        {
+          id: `${input.id}-report-m`,
+          entityId: source.id,
+          firm: 'OpenZeppelin',
+          publishedAt: new Date('2026-07-02T00:00:00.000Z'),
+          projectHint: 'aave-v3-review',
+          observationIds: [],
+          reportUrl: `https://reports.example/${input.id}-m`,
+          coveredPaths: [],
+        },
+      ],
     });
   }
 
@@ -100,6 +160,7 @@ async function createCandidate(input: {
       similarity: input.similarity,
       reason: input.reason ?? { tokenJaccard: 0.9, editSimilarity: 0.8 },
       createdAt: input.createdAt,
+      decidedAt: input.decidedAt,
     },
   });
 }
@@ -136,6 +197,7 @@ beforeEach(async () => {
     status: 'approved',
     similarity: 0.7,
     createdAt: new Date('2026-08-01T13:00:00.000Z'),
+    decidedAt: new Date('2026-08-02T09:30:00.000Z'),
   });
   await createCandidate({
     id: 'rejected-candidate',
@@ -154,7 +216,7 @@ afterAll(async () => {
 });
 
 describe('listMergeQueue', () => {
-  it('returns stable pending candidates with serializable evidence and global status counts', async () => {
+  it('returns stable pending candidates with global status counts', async () => {
     const page = await listMergeQueue(prisma, 'pending');
 
     expect(page.counts).toEqual({ pending: 3, approved: 1, rejected: 1 });
@@ -163,14 +225,35 @@ describe('listMergeQueue', () => {
       'older-tie',
       'newer-tie',
     ]);
-    expect(page.candidates[0]!.source?.projectHints).toEqual(['aave-v3-review']);
-    expect(page.candidates[0]!.target?.repoScopes).toContain('github.com/aave/aave-v3-origin');
     expect(page.candidates[0]).toMatchObject({
       tokenJaccard: null,
       editSimilarity: null,
       createdAt: '2026-08-01T10:00:00.000Z',
+      decidedAt: null,
       approvable: true,
       blockedReason: null,
     });
+  });
+
+  it('serializes a non-null decision timestamp to the exact ISO value', async () => {
+    const page = await listMergeQueue(prisma, 'approved');
+
+    expect(page.candidates[0]!.decidedAt).toBe('2026-08-02T09:30:00.000Z');
+  });
+
+  it('deduplicates evidence lists in deterministic relation order', async () => {
+    const page = await listMergeQueue(prisma, 'pending');
+
+    expect(page.candidates[0]!.source?.projectHints).toEqual([
+      'aave-v3-review',
+      'aave-v3-security',
+    ]);
+    expect(page.candidates[0]!.source?.auditFirms).toEqual(['Trail of Bits', 'OpenZeppelin']);
+    expect(page.candidates[0]!.target?.platforms).toEqual(['code4rena', 'immunefi']);
+    expect(page.candidates[0]!.target?.programTitles).toEqual(['Aave Governance', 'Aave V3']);
+    expect(page.candidates[0]!.target?.repoScopes).toEqual([
+      'github.com/aave/aave-governance-v3',
+      'github.com/aave/aave-v3-origin',
+    ]);
   });
 });
