@@ -1,23 +1,38 @@
-[
-  {
-    "contestid": 412,
-    "title": "Acme Vault",
-    "sponsor": "Acme",
-    "start_time": "2026-07-28T14:00:00Z",
-    "end_time": "2026-08-04T14:00:00Z",
-    "amount": "$100,000 USDC",
-    "repo": "https://github.com/code-423n4/2026-07-acme",
-    "findingsRepo": "https://github.com/code-423n4/2026-07-acme-findings",
-    "hide": false
+{
+  "data": {
+    "audits": [
+      {
+        "contestId": 554,
+        "title": "Monetrix",
+        "slug": "2026-04-monetrix",
+        "startTime": "2026-04-24T20:00:00.000Z",
+        "endTime": "2026-05-04T20:00:00.000Z",
+        "formattedAmount": "$22,000 in USDC",
+        "repo": "https://github.com/code-423n4/2026-04-monetrix",
+        "status": "Completed",
+        "org": {
+          "name": "Monetrix"
+        }
+      },
+      {
+        "contestId": 459,
+        "title": "Audit 459 Invitational",
+        "slug": "2024-10-audit-459-invitational",
+        "startTime": "2024-10-23T20:00:00.000Z",
+        "endTime": "2024-10-31T20:00:00.000Z",
+        "formattedAmount": "$36,000 in USDC",
+        "repo": "https://github.com/code-423n4/2024-10-audit-459",
+        "status": "Completed",
+        "org": {
+          "name": "Audit 459"
+        }
+      }
+    ]
   },
-  {
-    "contestid": 400,
-    "title": "Hidden Contest",
-    "sponsor": "Nope",
-    "start_time": "2026-06-01T14:00:00Z",
-    "end_time": "2026-06-08T14:00:00Z",
-    "amount": "$50,000 USDC",
-    "repo": "",
-    "hide": true
+  "pagination": {
+    "total": 475,
+    "lastPage": 5,
+    "currentPage": 1,
+    "perPage": 100
   }
-]
+}

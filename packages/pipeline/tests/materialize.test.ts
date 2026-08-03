@@ -50,6 +50,11 @@ describe('latestBySourceUrl', () => {
   it('ghi lại thời điểm nội dung đổi lần gần nhất', () => {
     expect(latestBySourceUrl(obs)[0]!.changedAt).toEqual(new Date('2026-08-03T00:00:00Z'));
   });
+
+  it('không coi lần crawl đầu tiên là lúc scope thay đổi', () => {
+    const firstSeen = latestBySourceUrl([obs[0]!]);
+    expect(firstSeen[0]!.changedAt).toBeNull();
+  });
 });
 
 describe('toProgramRecords', () => {

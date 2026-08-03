@@ -53,7 +53,6 @@ async function upsertProgram(
   program: ProgramFields,
   scopes: ReadonlyArray<{ hardKey: string; repoUrl: string; pathGlobs: string[] }>,
   freshnessAt: ReadonlyArray<Date | null>,
-  fallbackChangedAt: Date,
   now: Date,
 ): Promise<number> {
   const saved = await prisma.program.upsert({
@@ -82,9 +81,11 @@ async function upsertProgram(
 
     // addedAt của asset chính xác hơn ngày mở program: một repo thêm hôm qua
     // vào một program mở từ 2025 vẫn là scope mới tinh.
-    const scopeChangedAt = freshnessAt[i] ?? fallbackChangedAt;
     const freshness = extractFreshness(
-      { publishedAt: program.publishedAt ?? undefined, scopeChangedAt },
+      {
+        publishedAt: program.publishedAt ?? undefined,
+        scopeChangedAt: freshnessAt[i] ?? undefined,
+      },
       now,
     );
 
@@ -129,7 +130,6 @@ async function materialize(): Promise<void> {
       r.program,
       [r.scope],
       [r.changedAt],
-      r.changedAt,
       now,
     );
   }
@@ -146,7 +146,6 @@ async function materialize(): Promise<void> {
       r.program,
       r.scopes,
       r.scopes.map((s) => s.addedAt),
-      r.changedAt,
       now,
     );
   }

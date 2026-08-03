@@ -8,8 +8,8 @@ export interface ObservationRow {
 
 export interface LatestObservation {
   sourceUrl: string;
-  /** Lần gần nhất NỘI DUNG đổi, không phải lần fetch gần nhất. */
-  changedAt: Date;
+  /** Lần gần nhất NỘI DUNG đổi; null nếu mới chỉ thấy source đúng một lần. */
+  changedAt: Date | null;
   payload: unknown;
 }
 
@@ -19,15 +19,21 @@ export interface LatestObservation {
  * lần cuối khi nào — đó chính là tín hiệu "scope vừa mở rộng".
  */
 export function latestBySourceUrl(rows: readonly ObservationRow[]): LatestObservation[] {
-  const best = new Map<string, ObservationRow>();
+  const grouped = new Map<string, { latest: ObservationRow; count: number }>();
   for (const r of rows) {
-    const cur = best.get(r.sourceUrl);
-    if (!cur || r.fetchedAt.getTime() > cur.fetchedAt.getTime()) best.set(r.sourceUrl, r);
+    const cur = grouped.get(r.sourceUrl);
+    if (!cur) {
+      grouped.set(r.sourceUrl, { latest: r, count: 1 });
+      continue;
+    }
+    cur.count += 1;
+    if (r.fetchedAt.getTime() > cur.latest.fetchedAt.getTime()) cur.latest = r;
   }
-  return [...best.values()].map((r) => ({
-    sourceUrl: r.sourceUrl,
-    changedAt: r.fetchedAt,
-    payload: r.payload,
+  return [...grouped.values()].map(({ latest, count }) => ({
+    sourceUrl: latest.sourceUrl,
+    // Lần crawl đầu chỉ cho biết "ta vừa nhìn thấy", không chứng minh scope vừa đổi.
+    changedAt: count > 1 ? latest.fetchedAt : null,
+    payload: latest.payload,
   }));
 }
 
@@ -51,7 +57,7 @@ export interface ProgramRecord {
     repoUrl: string;
     pathGlobs: string[];
   };
-  changedAt: Date;
+  changedAt: Date | null;
 }
 
 function toDate(v: string | null | undefined): Date | null {
@@ -108,7 +114,7 @@ export interface ScopeRecord {
 export interface MultiScopeRecord {
   program: ProgramFields;
   scopes: ScopeRecord[];
-  changedAt: Date;
+  changedAt: Date | null;
 }
 
 function isImmunefiPayload(v: unknown): v is ImmunefiProgramPayload {

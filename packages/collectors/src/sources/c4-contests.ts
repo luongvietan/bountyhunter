@@ -3,17 +3,21 @@ import { normalizeRepoUrl } from '@kritt-radar/core';
 import { fetchJson } from '../http.js';
 import { makeObservation, type Collector, type FetchCtx, type RawObservation } from '../types.js';
 
-const C4_URL = 'https://code4rena.com/api/contests';
+const C4_URL = 'https://code4rena.com/api/v1/audits?perPage=100&page=1';
 
 const RawContest = z.object({
-  contestid: z.union([z.number(), z.string()]),
+  contestId: z.union([z.number(), z.string()]),
   title: z.string(),
-  sponsor: z.string().optional(),
-  start_time: z.string(),
-  end_time: z.string(),
-  amount: z.string().optional(),
+  slug: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  formattedAmount: z.string().nullish(),
   repo: z.string().optional(),
-  hide: z.boolean().optional(),
+  org: z.object({ name: z.string().optional() }).optional(),
+});
+
+const RawResponse = z.object({
+  data: z.object({ audits: z.array(z.unknown()) }),
 });
 
 export interface ProgramPayload {
@@ -40,28 +44,28 @@ export function parsePoolUsd(raw: string | undefined): number | null {
 }
 
 export function parseC4Contests(raw: unknown): RawObservation<ProgramPayload>[] {
-  if (!Array.isArray(raw)) return [];
+  const response = RawResponse.safeParse(raw);
+  if (!response.success) return [];
   const out: RawObservation<ProgramPayload>[] = [];
 
-  for (const item of raw) {
+  for (const item of response.data.data.audits) {
     const parsed = RawContest.safeParse(item);
     if (!parsed.success) continue;
     const c = parsed.data;
-    if (c.hide) continue;
 
-    const externalId = String(c.contestid);
+    const externalId = String(c.contestId);
     const payload: ProgramPayload = {
       platform: 'code4rena',
       externalId,
       title: c.title,
-      url: `https://code4rena.com/contests/${externalId}`,
-      poolUsd: parsePoolUsd(c.amount),
+      url: `https://code4rena.com/audits/${c.slug}`,
+      poolUsd: parsePoolUsd(c.formattedAmount ?? undefined),
       kind: 'contest',
-      publishedAt: c.start_time,
-      startsAt: c.start_time,
-      endsAt: c.end_time,
+      publishedAt: c.startTime,
+      startsAt: c.startTime,
+      endsAt: c.endTime,
       repoUrl: c.repo ? normalizeRepoUrl(c.repo) : null,
-      sponsor: c.sponsor ?? null,
+      sponsor: c.org?.name ?? null,
     };
     out.push(makeObservation('c4-contests', payload.url, payload));
   }

@@ -5,22 +5,28 @@ import { parseC4Contests } from '../src/sources/c4-contests.js';
 describe('parseC4Contests', () => {
   it('chuẩn hoá contest hợp lệ thành observation', () => {
     const out = parseC4Contests(fixture);
-    expect(out).toHaveLength(1);
+    expect(out).toHaveLength(2);
     const o = out[0]!;
     expect(o.collectorId).toBe('c4-contests');
-    expect(o.payload.externalId).toBe('412');
-    expect(o.payload.title).toBe('Acme Vault');
-    expect(o.payload.poolUsd).toBe(100000);
+    expect(o.payload.externalId).toBe('554');
+    expect(o.payload.title).toBe('Monetrix');
+    expect(o.payload.url).toBe('https://code4rena.com/audits/2026-04-monetrix');
+    expect(o.payload.poolUsd).toBe(22000);
     expect(o.payload.kind).toBe('contest');
-    expect(o.payload.repoUrl).toBe('github.com/code-423n4/2026-07-acme');
-  });
-
-  it('bỏ contest bị ẩn', () => {
-    expect(parseC4Contests(fixture).some((o) => o.payload.title === 'Hidden Contest')).toBe(false);
+    expect(o.payload.repoUrl).toBe('github.com/code-423n4/2026-04-monetrix');
+    expect(o.payload.sponsor).toBe('Monetrix');
   });
 
   it('bỏ qua bản ghi rác thay vì ném lỗi', () => {
-    expect(parseC4Contests([{ nonsense: true }, ...fixture])).toHaveLength(1);
+    const raw = {
+      ...fixture,
+      data: { audits: [{ nonsense: true }, ...fixture.data.audits] },
+    };
+    expect(parseC4Contests(raw)).toHaveLength(2);
+  });
+
+  it('trả mảng rỗng khi response không có data.audits', () => {
+    expect(parseC4Contests([{ nonsense: true }])).toEqual([]);
   });
 
   it('hash ổn định giữa hai lần parse cùng dữ liệu', () => {
