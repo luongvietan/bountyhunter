@@ -6,9 +6,11 @@ export interface HarnessDeps {
   now?: () => Date;
 }
 
+export type CollectorRunStatus = 'ok' | 'partial' | 'error' | 'skipped';
+
 export interface CollectorRunResult {
   collectorId: string;
-  status: 'ok' | 'error' | 'skipped';
+  status: CollectorRunStatus;
   itemCount: number;
   error?: string;
   startedAt: Date;
@@ -44,7 +46,26 @@ export async function runCollector(
       buffer.push(obs);
     }
     const saved = await deps.save(buffer);
-    return { ...base, status: 'ok', itemCount: saved, finishedAt: now() };
+    const failures = buffer.filter((observation) => observation.health?.ok === false);
+    const successes = buffer.length - failures.length;
+
+    if (failures.length === 0) {
+      return { ...base, status: 'ok', itemCount: saved, finishedAt: now() };
+    }
+    if (successes > 0) {
+      return { ...base, status: 'partial', itemCount: saved, finishedAt: now() };
+    }
+
+    const messages = failures
+      .map((observation) => observation.health?.error)
+      .filter((message): message is string => Boolean(message));
+    return {
+      ...base,
+      status: 'error',
+      itemCount: saved,
+      ...(messages.length > 0 ? { error: messages.join('; ') } : {}),
+      finishedAt: now(),
+    };
   } catch (err) {
     return {
       ...base,

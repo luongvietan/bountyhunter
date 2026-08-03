@@ -10,6 +10,18 @@ export {
   type RepoActivityPayload,
 } from './github-repo-activity.js';
 export {
+  makeGithubRepoSnapshots,
+  parseHead,
+  parseTree,
+  parseCompare,
+  type GithubJsonFetcher,
+  type ParsedCompare,
+  type ParsedHead,
+  type ParsedTree,
+  type RepoSnapshotPayload,
+  type RepoTarget,
+} from './github-repo-snapshot.js';
+export {
   auditReportRepos,
   parseAuditTree,
   AUDIT_REPO_SOURCES,

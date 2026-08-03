@@ -22,4 +22,19 @@ describe('makeObservation', () => {
     expect(o.sourceUrl).toBe('https://example.com/a');
     expect(o.contentHash).toBe(contentHash({ id: 1 }));
   });
+
+  it('keeps payload hashing independent from observation health', () => {
+    const payload = { id: 1 };
+    const healthy = makeObservation('snapshot', 'https://example.com/repo', payload, {
+      ok: true,
+    });
+    const failed = makeObservation('snapshot', 'https://example.com/repo', payload, {
+      ok: false,
+      error: 'temporary failure',
+    });
+
+    expect(healthy.contentHash).toBe(failed.contentHash);
+    expect(healthy.health).toEqual({ ok: true });
+    expect(failed.health).toEqual({ ok: false, error: 'temporary failure' });
+  });
 });

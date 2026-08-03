@@ -1,0 +1,248 @@
+import { z } from 'zod';
+import { fetchJson } from '../http.js';
+import {
+  makeObservation,
+  type Collector,
+  type FetchCtx,
+  type RawObservation,
+} from '../types.js';
+import { matchesGlobs } from './github-repo-activity.js';
+
+const HeadResponse = z.object({
+  sha: z.string().min(1),
+  commit: z.object({
+    author: z.object({ date: z.string().min(1) }),
+    tree: z.object({ sha: z.string().min(1) }),
+  }),
+});
+
+const TreeResponse = z.object({
+  tree: z.array(
+    z.object({
+      path: z.string(),
+      type: z.string(),
+      size: z.number().nonnegative().optional(),
+    }),
+  ),
+  truncated: z.boolean(),
+});
+
+const CompareResponse = z.object({
+  commits: z.array(z.object({ sha: z.string().min(1) })),
+  files: z.array(
+    z.object({
+      filename: z.string(),
+      additions: z.number().nonnegative(),
+      deletions: z.number().nonnegative(),
+    }),
+  ),
+});
+
+const BaseCommitResponse = z.array(z.object({ sha: z.string().min(1) })).min(1);
+
+export interface RepoTarget {
+  repoKey: string;
+  pathGlobs: string[];
+  lastAuditAt: string | null;
+  coveredCommit: string | null;
+}
+
+export interface RepoSnapshotPayload {
+  repoKey: string;
+  cutoff: { lastAuditAt: string | null; baseCommit: string | null };
+  headSha: string | null;
+  headAuthoredAt: string | null;
+  files: string[];
+  totalLoc: number;
+  locMethod: 'estimated_from_bytes';
+  changedFiles: Array<{ path: string; changedLoc: number }>;
+  commits: string[];
+  complete: boolean;
+  truncated: boolean;
+  error: string | null;
+}
+
+export interface ParsedHead {
+  sha: string;
+  authoredAt: string;
+  treeSha: string;
+}
+
+export interface ParsedTree {
+  files: string[];
+  totalBytes: number;
+  truncated: boolean;
+}
+
+export interface ParsedCompare {
+  changedFiles: Array<{ path: string; changedLoc: number }>;
+  commits: string[];
+  truncated: boolean;
+}
+
+export function parseHead(raw: unknown): ParsedHead {
+  const head = HeadResponse.parse(raw);
+  return {
+    sha: head.sha,
+    authoredAt: head.commit.author.date,
+    treeSha: head.commit.tree.sha,
+  };
+}
+
+export function parseTree(raw: unknown, pathGlobs: readonly string[]): ParsedTree {
+  const response = TreeResponse.parse(raw);
+  const files: string[] = [];
+  let totalBytes = 0;
+
+  for (const node of response.tree) {
+    if (node.type !== 'blob' || !matchesGlobs(node.path, pathGlobs)) continue;
+    if (node.size === undefined) {
+      throw new Error(`GitHub tree blob is missing size: ${node.path}`);
+    }
+    files.push(node.path);
+    totalBytes += node.size;
+  }
+
+  return { files, totalBytes, truncated: response.truncated };
+}
+
+export function parseCompare(raw: unknown, pathGlobs: readonly string[]): ParsedCompare {
+  const response = CompareResponse.parse(raw);
+  return {
+    changedFiles: response.files
+      .filter((file) => matchesGlobs(file.filename, pathGlobs))
+      .map((file) => ({
+        path: file.filename,
+        changedLoc: file.additions + file.deletions,
+      })),
+    commits: response.commits.map((commit) => commit.sha),
+    truncated: response.files.length >= 300,
+  };
+}
+
+type GithubRequestOptions = Parameters<typeof fetchJson>[1];
+export type GithubJsonFetcher = (
+  url: string,
+  options: GithubRequestOptions,
+) => Promise<unknown>;
+
+const rateLimit = { rps: 2, burst: 5 };
+
+const defaultGithubJsonFetcher: GithubJsonFetcher = (url, options) =>
+  fetchJson<unknown>(url, options);
+
+function repoApiBase(repoKey: string): string {
+  const [host, owner, repo, ...extra] = repoKey.split('/');
+  if (host !== 'github.com' || !owner || !repo || extra.length > 0) {
+    throw new Error(`invalid GitHub repo key: ${repoKey}`);
+  }
+  return `https://api.github.com/repos/${owner}/${repo}`;
+}
+
+export function makeGithubRepoSnapshots(
+  listTargets: () => Promise<RepoTarget[]>,
+  requestJson: GithubJsonFetcher = defaultGithubJsonFetcher,
+): Collector<RepoSnapshotPayload> {
+  return {
+    id: 'github-repo-snapshot',
+    cadence: '0 */6 * * *',
+    rateLimit,
+    requiresCredential: 'GITHUB_TOKEN',
+    async *fetch(ctx: FetchCtx): AsyncIterable<RawObservation<RepoSnapshotPayload>> {
+      const targets = await listTargets();
+      const headers = {
+        accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2026-03-10',
+        ...(ctx.env.GITHUB_TOKEN
+          ? { authorization: `Bearer ${ctx.env.GITHUB_TOKEN}` }
+          : {}),
+      };
+
+      for (const target of targets) {
+        let baseCommit = target.coveredCommit;
+        let sourceUrl = `https://${target.repoKey}`;
+        let head: ParsedHead | null = null;
+        let tree: ParsedTree | null = null;
+        let compare: ParsedCompare = { changedFiles: [], commits: [], truncated: false };
+
+        try {
+          const apiBase = repoApiBase(target.repoKey);
+          sourceUrl = apiBase;
+          const options = { limit: rateLimit, headers };
+          head = parseHead(
+            await requestJson(`${apiBase}/commits/HEAD`, options),
+          );
+          tree = parseTree(
+            await requestJson(
+              `${apiBase}/git/trees/${encodeURIComponent(head.treeSha)}?recursive=1`,
+              options,
+            ),
+            target.pathGlobs,
+          );
+
+          if (!baseCommit && target.lastAuditAt) {
+            const baseResponse = BaseCommitResponse.parse(
+              await requestJson(
+                `${apiBase}/commits?until=${encodeURIComponent(target.lastAuditAt)}&per_page=1`,
+                options,
+              ),
+            );
+            baseCommit = baseResponse[0]!.sha;
+          }
+
+          if (baseCommit) {
+            compare = parseCompare(
+              await requestJson(
+                `${apiBase}/compare/${encodeURIComponent(baseCommit)}...${encodeURIComponent(head.sha)}?per_page=100&page=1`,
+                options,
+              ),
+              target.pathGlobs,
+            );
+          }
+
+          const truncated = tree.truncated || compare.truncated;
+          const payload: RepoSnapshotPayload = {
+            repoKey: target.repoKey,
+            cutoff: { lastAuditAt: target.lastAuditAt, baseCommit },
+            headSha: head.sha,
+            headAuthoredAt: head.authoredAt,
+            files: tree.files,
+            totalLoc: Math.ceil(tree.totalBytes / 40),
+            locMethod: 'estimated_from_bytes',
+            changedFiles: compare.changedFiles,
+            commits: compare.commits,
+            complete: !truncated,
+            truncated,
+            error: null,
+          };
+
+          yield makeObservation('github-repo-snapshot', sourceUrl, payload, {
+            ok: true,
+          });
+        } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
+          const truncated = Boolean(tree?.truncated || compare.truncated);
+          const payload: RepoSnapshotPayload = {
+            repoKey: target.repoKey,
+            cutoff: { lastAuditAt: target.lastAuditAt, baseCommit },
+            headSha: head?.sha ?? null,
+            headAuthoredAt: head?.authoredAt ?? null,
+            files: tree?.files ?? [],
+            totalLoc: tree ? Math.ceil(tree.totalBytes / 40) : 0,
+            locMethod: 'estimated_from_bytes',
+            changedFiles: compare.changedFiles,
+            commits: compare.commits,
+            complete: false,
+            truncated,
+            error,
+          };
+
+          yield makeObservation('github-repo-snapshot', sourceUrl, payload, {
+            ok: false,
+            error,
+          });
+        }
+      }
+    },
+  };
+}

@@ -31,6 +31,41 @@ const needsKey: Collector = {
   },
 };
 
+const partial: Collector = {
+  id: 'partial',
+  cadence: '* * * * *',
+  rateLimit: { rps: 10, burst: 10 },
+  async *fetch() {
+    yield makeObservation(
+      'partial',
+      'https://x/1',
+      { n: 1 },
+      { ok: false, error: 'repo one failed' },
+    );
+    yield makeObservation('partial', 'https://x/2', { n: 2 }, { ok: true });
+  },
+};
+
+const allFailed: Collector = {
+  id: 'all-failed',
+  cadence: '* * * * *',
+  rateLimit: { rps: 10, burst: 10 },
+  async *fetch() {
+    yield makeObservation(
+      'all-failed',
+      'https://x/1',
+      { n: 1 },
+      { ok: false, error: 'repo one failed' },
+    );
+    yield makeObservation(
+      'all-failed',
+      'https://x/2',
+      { n: 2 },
+      { ok: false, error: 'repo two failed' },
+    );
+  },
+};
+
 describe('runCollector', () => {
   it('gom observation và báo ok', async () => {
     const saved: unknown[] = [];
@@ -66,5 +101,36 @@ describe('runCollector', () => {
     });
     expect(r.status).toBe('ok');
     expect(r.itemCount).toBe(1);
+  });
+
+  it('saves mixed-health observations and reports a partial run', async () => {
+    const saved: unknown[] = [];
+    const run = await runCollector(partial, {
+      env: {},
+      save: async (observations) => {
+        saved.push(...observations);
+        return observations.length;
+      },
+    });
+
+    expect(run.status).toBe('partial');
+    expect(run.itemCount).toBe(2);
+    expect(saved).toHaveLength(2);
+  });
+
+  it('saves all failure observations and reports an error run', async () => {
+    const saved: unknown[] = [];
+    const run = await runCollector(allFailed, {
+      env: {},
+      save: async (observations) => {
+        saved.push(...observations);
+        return observations.length;
+      },
+    });
+
+    expect(run.status).toBe('error');
+    expect(run.itemCount).toBe(2);
+    expect(run.error).toContain('repo one failed');
+    expect(saved).toHaveLength(2);
   });
 });

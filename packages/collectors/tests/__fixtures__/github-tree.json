@@ -1,0 +1,30 @@
+{
+  "sha": "tree456",
+  "url": "https://api.github.com/repos/acme/protocol/git/trees/tree456",
+  "tree": [
+    {
+      "path": "src/Pool.sol",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "blob-pool",
+      "size": 4000,
+      "url": "https://api.github.com/repos/acme/protocol/git/blobs/blob-pool"
+    },
+    {
+      "path": "src/interfaces",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "tree-interfaces",
+      "url": "https://api.github.com/repos/acme/protocol/git/trees/tree-interfaces"
+    },
+    {
+      "path": "test/Pool.t.sol",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "blob-test",
+      "size": 2400,
+      "url": "https://api.github.com/repos/acme/protocol/git/blobs/blob-test"
+    }
+  ],
+  "truncated": false
+}

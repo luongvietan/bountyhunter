@@ -1,0 +1,48 @@
+{
+  "url": "https://api.github.com/repos/acme/protocol/compare/base000...abc123",
+  "html_url": "https://github.com/acme/protocol/compare/base000...abc123",
+  "status": "ahead",
+  "ahead_by": 2,
+  "behind_by": 0,
+  "total_commits": 2,
+  "commits": [
+    {
+      "sha": "commit-one",
+      "commit": {
+        "author": { "date": "2026-07-30T09:00:00Z" },
+        "tree": { "sha": "tree-one" }
+      }
+    },
+    {
+      "sha": "abc123",
+      "commit": {
+        "author": { "date": "2026-07-31T10:20:30Z" },
+        "tree": { "sha": "tree456" }
+      }
+    }
+  ],
+  "files": [
+    {
+      "sha": "blob-pool",
+      "filename": "src/Pool.sol",
+      "status": "modified",
+      "additions": 30,
+      "deletions": 12,
+      "changes": 42,
+      "blob_url": "https://github.com/acme/protocol/blob/abc123/src/Pool.sol",
+      "raw_url": "https://github.com/acme/protocol/raw/abc123/src/Pool.sol",
+      "contents_url": "https://api.github.com/repos/acme/protocol/contents/src/Pool.sol?ref=abc123"
+    },
+    {
+      "sha": "blob-readme",
+      "filename": "README.md",
+      "status": "modified",
+      "additions": 4,
+      "deletions": 1,
+      "changes": 5,
+      "blob_url": "https://github.com/acme/protocol/blob/abc123/README.md",
+      "raw_url": "https://github.com/acme/protocol/raw/abc123/README.md",
+      "contents_url": "https://api.github.com/repos/acme/protocol/contents/README.md?ref=abc123"
+    }
+  ]
+}

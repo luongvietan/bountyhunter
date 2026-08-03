@@ -1,11 +1,17 @@
 import { createHash } from 'node:crypto';
 import type { RateLimit } from './http.js';
 
+export interface ObservationHealth {
+  ok: boolean;
+  error?: string;
+}
+
 export interface RawObservation<T = unknown> {
   collectorId: string;
   sourceUrl: string;
   payload: T;
   contentHash: string;
+  health?: ObservationHealth;
 }
 
 export interface FetchCtx {
@@ -41,6 +47,13 @@ export function makeObservation<T>(
   collectorId: string,
   sourceUrl: string,
   payload: T,
+  health?: ObservationHealth,
 ): RawObservation<T> {
-  return { collectorId, sourceUrl, payload, contentHash: contentHash(payload) };
+  return {
+    collectorId,
+    sourceUrl,
+    payload,
+    contentHash: contentHash(payload),
+    ...(health ? { health } : {}),
+  };
 }
