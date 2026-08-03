@@ -45,6 +45,35 @@ CREATE INDEX "MergeCandidate_status_similarity_idx" ON "MergeCandidate"("status"
 -- CreateIndex
 CREATE UNIQUE INDEX "MergeCandidate_leftEntityId_rightEntityId_key" ON "MergeCandidate"("leftEntityId", "rightEntityId");
 
+-- Consolidate legacy duplicate URLs before enforcing report identity. The newest
+-- report wins; equal publication timestamps use the lexicographically smallest ID.
+-- Observation IDs remain replayable by merging distinct non-null values onto the
+-- retained report before duplicate rows are removed.
+WITH grouped_reports AS (
+    SELECT
+        report."reportUrl",
+        (array_agg(report."id" ORDER BY report."publishedAt" DESC, report."id" ASC))[1] AS "canonicalId",
+        COALESCE(
+            array_agg(DISTINCT observation."id" ORDER BY observation."id") FILTER (WHERE observation."id" IS NOT NULL),
+            ARRAY[]::TEXT[]
+        ) AS "observationIds"
+    FROM "AuditReport" AS report
+    LEFT JOIN LATERAL unnest(report."observationIds") AS observation("id") ON TRUE
+    GROUP BY report."reportUrl"
+),
+updated_reports AS (
+    UPDATE "AuditReport" AS report
+    SET "observationIds" = grouped_reports."observationIds"
+    FROM grouped_reports
+    WHERE report."id" = grouped_reports."canonicalId"
+      AND report."observationIds" IS DISTINCT FROM grouped_reports."observationIds"
+    RETURNING report."id"
+)
+DELETE FROM "AuditReport" AS duplicate
+USING grouped_reports
+WHERE duplicate."reportUrl" = grouped_reports."reportUrl"
+  AND duplicate."id" <> grouped_reports."canonicalId";
+
 -- CreateIndex
 CREATE UNIQUE INDEX "AuditReport_reportUrl_key" ON "AuditReport"("reportUrl");
 
