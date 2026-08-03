@@ -1,0 +1,8 @@
+# Tầng 2 của entity resolution — khai tay.
+# Số protocol đáng quan tâm chỉ vài trăm, và một dòng ở đây chính xác hơn mọi
+# thuật toán fuzzy. Thêm entry mỗi khi thấy hai nguồn nói về cùng một dự án mà
+# không chung repo key.
+uniswap-v4:
+  canonicalName: Uniswap v4
+  match:
+    - repo: github.com/uniswap/v4-core

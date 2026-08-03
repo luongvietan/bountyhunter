@@ -55,6 +55,24 @@ importers:
         specifier: ^6.2.0
         version: 6.19.3(typescript@5.9.3)
 
+  packages/pipeline:
+    dependencies:
+      '@kritt-radar/collectors':
+        specifier: workspace:*
+        version: link:../collectors
+      '@kritt-radar/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kritt-radar/db':
+        specifier: workspace:*
+        version: link:../db
+      yaml:
+        specifier: ^2.6.1
+        version: 2.9.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.1':
