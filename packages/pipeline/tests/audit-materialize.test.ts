@@ -103,6 +103,26 @@ describe('toAuditReportRecords', () => {
     expect(records[0]!.observationId).toBe('observation-z');
   });
 
+  it('drops ISO timestamps with impossible calendar dates', () => {
+    const records = toAuditReportRecords([
+      {
+        id: 'observation-impossible-date',
+        sourceUrl: 'https://api.github.com/repos/auditor/impossible-date/git/trees/current',
+        fetchedAt: new Date('2026-05-01T00:00:00.000Z'),
+        payload: [
+          {
+            firm: 'Auditor',
+            projectHint: 'impossible-date',
+            publishedAt: '2026-02-30T00:00:00.000Z',
+            reportUrl: 'https://reports.example/impossible-date.pdf',
+          },
+        ],
+      },
+    ]);
+
+    expect(records).toEqual([]);
+  });
+
   it('orders distinct report URLs deterministically', () => {
     const records = toAuditReportRecords([
       {

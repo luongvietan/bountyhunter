@@ -33,9 +33,15 @@ function isAuditReportPayload(value: unknown): value is AuditReportPayload {
   );
 }
 
+const AUDIT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 function toValidDate(value: string): Date | null {
+  if (!AUDIT_TIMESTAMP.test(value)) return null;
   const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp) : null;
+  if (!Number.isFinite(timestamp)) return null;
+
+  const parsed = new Date(timestamp);
+  return parsed.toISOString() === value ? parsed : null;
 }
 
 function isNewerObservation(candidate: AuditObservationRow, current: AuditObservationRow): boolean {
