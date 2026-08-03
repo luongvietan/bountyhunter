@@ -52,6 +52,7 @@ function candidate(overrides: Partial<QueueCandidate> = {}): QueueCandidate {
     tokenJaccard: 0.8,
     editSimilarity: 0.88,
     approvalEvidence: null,
+    normalizedAliasCount: 1,
     createdAt: '2026-08-04T00:00:00.000Z',
     decidedAt: null,
     source: provisional,
@@ -91,13 +92,22 @@ describe('merge queue read model', () => {
             id: provisional.id,
             slug: provisional.slug,
             canonicalName: provisional.canonicalName,
-            auditReports: [{
-              id: 'report-1',
-              projectHint: 'aave-v3-review',
-              firm: 'Trail of Bits',
-              publishedAt: new Date('2026-08-01T00:00:00.000Z'),
-              reportUrl: 'https://reports.example/report-1',
-            }],
+            auditReports: [
+              {
+                id: 'report-1',
+                projectHint: ' AAVE-V3-Review ',
+                firm: 'Trail of Bits',
+                publishedAt: new Date('2026-08-01T00:00:00.000Z'),
+                reportUrl: 'https://reports.example/report-1',
+              },
+              {
+                id: 'report-2',
+                projectHint: 'aave-v3-review',
+                firm: 'OpenZeppelin',
+                publishedAt: new Date('2026-07-31T00:00:00.000Z'),
+                reportUrl: 'https://reports.example/report-2',
+              },
+            ],
             programs: [],
           },
           rightEntity: {
@@ -125,6 +135,7 @@ describe('merge queue read model', () => {
       tokenJaccard: null,
       editSimilarity: null,
       createdAt: '2026-08-03T12:00:00.000Z',
+      normalizedAliasCount: 1,
     });
     expect(Number.isNaN(page.candidates[0]!.tokenJaccard)).toBe(false);
     expect(Number.isNaN(page.candidates[0]!.editSimilarity)).toBe(false);
@@ -235,6 +246,22 @@ describe('merge decision controls', () => {
     expect(approvalForm).toContain('required=""');
     expect(rejectionForm).not.toContain('type="checkbox"');
     expect(rejectionForm).not.toContain('required=""');
+  });
+
+  it('renders the normalized alias count instead of distinct raw hint count', () => {
+    const markup = renderToStaticMarkup(createElement(DecisionForm, {
+      candidate: candidate({
+        normalizedAliasCount: 1,
+        source: {
+          ...provisional,
+          projectHints: [' AAVE-V3-Review ', 'aave-v3-review'],
+          auditReportCount: 2,
+        },
+      }),
+    }));
+
+    expect(markup).toContain('Approval creates 1 manual audit alias');
+    expect(markup).not.toContain('Approval creates 2 manual audit aliases');
   });
 
   it('hides approval and renders the precise safety banner for a blocked candidate', () => {

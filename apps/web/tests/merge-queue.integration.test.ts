@@ -322,6 +322,22 @@ describe('listMergeQueue', () => {
     expect(page.candidates[0]).toMatchObject({ approvable: true, blockedReason: null });
   });
 
+  it('serializes differently formatted duplicate hints as one normalized alias', async () => {
+    await prisma.auditReport.update({
+      where: { id: 'highest-score-report-m' },
+      data: { projectHint: ' AAVE-V3-Review ' },
+    });
+    await prisma.auditReport.delete({ where: { id: 'highest-score-report-z' } });
+
+    const page = await listMergeQueue(prisma, 'pending');
+
+    expect(page.candidates[0]!.source?.projectHints).toEqual([
+      'aave-v3-review',
+      ' AAVE-V3-Review ',
+    ]);
+    expect(page.candidates[0]!.normalizedAliasCount).toBe(1);
+  });
+
   it('renders durable affected evidence after approval moves reports', async () => {
     const decidedAt = new Date('2026-08-04T08:00:00.000Z');
 

@@ -47,7 +47,7 @@ export function DecisionForm({ candidate }: DecisionFormProps) {
 
   const sourceName = candidate.source?.canonicalName ?? 'the provisional entity';
   const targetName = candidate.target?.canonicalName ?? 'the canonical entity';
-  const aliasCount = candidate.source?.projectHints.length ?? 0;
+  const aliasCount = candidate.normalizedAliasCount;
   const reportCount = candidate.source?.auditReportCount ?? 0;
   const anyPending = approvalPending || secondaryPending;
 

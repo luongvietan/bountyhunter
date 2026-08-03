@@ -45,6 +45,7 @@ export interface QueueCandidate {
   tokenJaccard: number | null;
   editSimilarity: number | null;
   approvalEvidence: QueueApprovalEvidence | null;
+  normalizedAliasCount: number;
   createdAt: string;
   decidedAt: string | null;
   source: QueueEntity | null;
@@ -188,6 +189,10 @@ function approvalBlock(
   return null;
 }
 
+function normalizedAliasCount(rawProjectHints: readonly string[]): number {
+  return new Set(rawProjectHints.map(normalizeAuditHintKey).filter((key) => key.length > 0)).size;
+}
+
 export function parseQueueStatus(value: string | string[] | undefined): QueueStatus {
   return typeof value === 'string' && isQueueStatus(value) ? value : 'pending';
 }
@@ -254,11 +259,12 @@ export async function listMergeQueue(
       const roles = inferCandidateRoles(left, right);
       const candidateStatus = parseQueueStatus(candidate.status);
       const provisionalEvidence = left.provisional ? candidate.leftEntity : candidate.rightEntity;
+      const rawProjectHints = provisionalEvidence.auditReports.map((report) => report.projectHint);
       const blockedReason = candidateStatus === 'pending' && roles.source && roles.target
         ? approvalBlock(
             roles.source,
             roles.target,
-            provisionalEvidence.auditReports.map((report) => report.projectHint),
+            rawProjectHints,
             auditHintAliases,
           )
         : roles.blockedReason;
@@ -270,6 +276,7 @@ export async function listMergeQueue(
         tokenJaccard: finiteScore(candidate.reason, 'tokenJaccard'),
         editSimilarity: finiteScore(candidate.reason, 'editSimilarity'),
         approvalEvidence: approvalEvidence(candidate.reason),
+        normalizedAliasCount: normalizedAliasCount(rawProjectHints),
         createdAt: candidate.createdAt.toISOString(),
         decidedAt: candidate.decidedAt?.toISOString() ?? null,
         source: roles.source,
