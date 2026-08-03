@@ -1,7 +1,7 @@
 # kritt-radar — Audit Gap Data Foundation
 
 Ngày: 2026-08-03
-Trạng thái: đã duyệt trong phiên thiết kế, chờ review tài liệu
+Trạng thái: đã duyệt
 
 ## 1. Mục tiêu
 
@@ -107,9 +107,9 @@ reason jsonb, decidedAt, createdAt, UNIQUE(leftEntityId, rightEntityId)
 
 ### AuditReport
 
-Bổ sung `projectHint`. `reportUrl` trở thành unique để replay observation không
-tạo bản ghi trùng. AuditReport luôn thuộc một Entity; trước khi được exact-match
-hoặc approve, nó thuộc provisional audit Entity.
+Bổ sung `projectHint` và `observationIds`. `reportUrl` trở thành unique để replay
+observation không tạo bản ghi trùng. AuditReport luôn thuộc một Entity; trước khi
+được exact-match hoặc approve, nó thuộc provisional audit Entity.
 
 ### Existing models
 
