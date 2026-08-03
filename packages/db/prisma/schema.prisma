@@ -8,12 +8,15 @@ datasource db {
 }
 
 model Entity {
-  id            String        @id @default(cuid())
-  canonicalName String
-  slug          String        @unique
-  createdAt     DateTime      @default(now())
-  programs      Program[]
-  auditReports  AuditReport[]
+  id              String           @id @default(cuid())
+  canonicalName   String
+  slug            String           @unique
+  createdAt       DateTime         @default(now())
+  programs        Program[]
+  auditReports    AuditReport[]
+  aliases         EntityAlias[]
+  leftCandidates  MergeCandidate[] @relation("CandidateLeft")
+  rightCandidates MergeCandidate[] @relation("CandidateRight")
 }
 
 model Program {
@@ -56,16 +59,48 @@ model Scope {
 }
 
 model AuditReport {
-  id            String   @id @default(cuid())
-  entity        Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  entityId      String
-  firm          String
-  publishedAt   DateTime
-  reportUrl     String
-  coveredCommit String?
-  coveredPaths  String[]
+  id             String   @id @default(cuid())
+  entity         Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entityId       String
+  firm           String
+  publishedAt    DateTime
+  projectHint    String
+  observationIds String[]
+  reportUrl      String
+  coveredCommit  String?
+  coveredPaths   String[]
 
+  @@unique([reportUrl])
   @@index([entityId, publishedAt])
+}
+
+model EntityAlias {
+  id        String   @id @default(cuid())
+  entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entityId  String
+  kind      String
+  key       String
+  source    String
+  createdAt DateTime @default(now())
+
+  @@unique([kind, key])
+  @@index([entityId])
+}
+
+model MergeCandidate {
+  id            String    @id @default(cuid())
+  leftEntity    Entity    @relation("CandidateLeft", fields: [leftEntityId], references: [id], onDelete: Cascade)
+  leftEntityId  String
+  rightEntity   Entity    @relation("CandidateRight", fields: [rightEntityId], references: [id], onDelete: Cascade)
+  rightEntityId String
+  similarity    Float
+  status        String    @default("pending")
+  reason        Json
+  decidedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([leftEntityId, rightEntityId])
+  @@index([status, similarity])
 }
 
 model Observation {
