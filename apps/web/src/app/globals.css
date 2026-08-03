@@ -542,6 +542,99 @@ summary:focus-visible {
   margin-top: 16px;
 }
 
+.report-provenance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.report-provenance h4 {
+  grid-column: 1 / -1;
+  margin: 0 0 3px;
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+  font-weight: 680;
+}
+
+.report-provenance a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--teal-deep);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-underline-offset: 3px;
+}
+
+.report-provenance time,
+.report-provenance span {
+  color: var(--ink-secondary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-provenance span {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
+.approved-evidence {
+  display: grid;
+  grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
+  gap: 12px 20px;
+  margin: 4px 0 20px;
+  padding: 16px;
+  border: 1px solid oklch(0.79 0.055 145);
+  border-radius: 8px;
+  background: var(--approved-bg);
+}
+
+.approved-evidence h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--approved-ink);
+  font-size: 0.8125rem;
+  font-weight: 720;
+}
+
+.approved-evidence > p {
+  grid-column: 1 / -1;
+  max-width: 72ch;
+  margin-bottom: 0;
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+
+.decision-impact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.decision-impact strong {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.875rem;
+}
+
+.decision-impact span {
+  color: var(--ink-secondary);
+  font-size: 0.8125rem;
+}
+
+.approved-evidence .report-provenance {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .empty-inline {
   margin-bottom: 0;
   color: var(--ink-secondary);
@@ -906,8 +999,23 @@ summary:focus-visible {
   }
 
   .conflict-banner,
-  .approval-panel {
+  .approval-panel,
+  .approved-evidence {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .approved-evidence h3,
+  .approved-evidence > p {
+    grid-column: 1;
+  }
+
+  .report-provenance {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-provenance h4,
+  .report-provenance span {
+    grid-column: 1;
   }
 
   .confirmation-control,

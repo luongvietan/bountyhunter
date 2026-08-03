@@ -1,6 +1,7 @@
 import { PrismaClient } from '@kritt-radar/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { listMergeQueue } from '../src/lib/merge-queue.js';
+import { decideMergeCandidate } from '../src/lib/merge-decisions.js';
 import { withSafeIntegrationDatabase } from '../../worker/tests/integration-database.js';
 
 const prisma = new PrismaClient();
@@ -255,5 +256,99 @@ describe('listMergeQueue', () => {
       'github.com/aave/aave-governance-v3',
       'github.com/aave/aave-v3-origin',
     ]);
+    expect(page.candidates[0]!.source?.newestReport).toEqual({
+      firm: 'OpenZeppelin',
+      projectHint: 'aave-v3-security',
+      publishedAt: '2026-07-03T00:00:00.000Z',
+      reportUrl: 'https://reports.example/highest-score-z',
+    });
+  });
+
+  it('blocks approval when the provisional entity has no audit reports', async () => {
+    await prisma.auditReport.deleteMany({ where: { entityId: 'highest-score-source' } });
+
+    const page = await listMergeQueue(prisma, 'pending');
+
+    expect(page.candidates[0]).toMatchObject({
+      approvable: false,
+      blockedReason: 'Provisional entity has no audit reports to merge.',
+    });
+  });
+
+  it('blocks approval when any normalized audit hint is empty', async () => {
+    await prisma.auditReport.update({
+      where: { id: 'highest-score-report-z' },
+      data: { projectHint: '   ' },
+    });
+
+    const page = await listMergeQueue(prisma, 'pending');
+
+    expect(page.candidates[0]).toMatchObject({
+      approvable: false,
+      blockedReason: 'Audit report project hints must not be empty.',
+    });
+  });
+
+  it('blocks approval when an audit hint alias belongs to another entity', async () => {
+    await prisma.entityAlias.create({
+      data: {
+        entityId: 'older-tie-target',
+        kind: 'audit_hint',
+        key: 'aave-v3-review',
+        source: 'config',
+      },
+    });
+
+    const page = await listMergeQueue(prisma, 'pending');
+
+    expect(page.candidates[0]).toMatchObject({
+      approvable: false,
+      blockedReason: 'An audit hint alias belongs to another entity.',
+    });
+  });
+
+  it('keeps approval available when an audit hint alias already targets the canonical entity', async () => {
+    await prisma.entityAlias.create({
+      data: {
+        entityId: 'highest-score-target',
+        kind: 'audit_hint',
+        key: 'aave-v3-review',
+        source: 'config',
+      },
+    });
+
+    const page = await listMergeQueue(prisma, 'pending');
+
+    expect(page.candidates[0]).toMatchObject({ approvable: true, blockedReason: null });
+  });
+
+  it('renders durable affected evidence after approval moves reports', async () => {
+    const decidedAt = new Date('2026-08-04T08:00:00.000Z');
+
+    await expect(
+      decideMergeCandidate(prisma, {
+        candidateId: 'highest-score',
+        action: 'approve',
+        now: decidedAt,
+      }),
+    ).resolves.toMatchObject({ ok: true, reportsMoved: 3 });
+
+    const page = await listMergeQueue(prisma, 'approved');
+    const approved = page.candidates.find((candidate) => candidate.id === 'highest-score');
+
+    expect(approved).toMatchObject({
+      decidedAt: decidedAt.toISOString(),
+      approvalEvidence: {
+        reportsMoved: 3,
+        aliasKeys: ['aave-v3-review', 'aave-v3-security'],
+        newestReport: {
+          firm: 'OpenZeppelin',
+          projectHint: 'aave-v3-security',
+          publishedAt: '2026-07-03T00:00:00.000Z',
+          reportUrl: 'https://reports.example/highest-score-z',
+        },
+      },
+    });
+    expect(approved?.source?.auditReportCount).toBe(0);
   });
 });

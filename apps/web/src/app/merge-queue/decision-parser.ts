@@ -31,7 +31,21 @@ export function parseDecisionForm(formData: FormData): ParsedDecisionForm {
   }
 
   const parsed = decisionSchema.safeParse({ candidateId, action });
-  return parsed.success
-    ? { ok: true, value: parsed.data }
-    : { ok: false, message: 'Invalid candidate decision.' };
+  if (!parsed.success) return { ok: false, message: 'Invalid candidate decision.' };
+
+  if (parsed.data.action === 'approve') {
+    const confirmations = formData.getAll('confirmed');
+    if (confirmations.length === 0) {
+      return { ok: false, message: 'Confirm the candidate identities before approval.' };
+    }
+    if (
+      confirmations.length !== 1
+      || typeof confirmations[0] !== 'string'
+      || confirmations[0] !== 'on'
+    ) {
+      return { ok: false, message: 'Invalid approval confirmation.' };
+    }
+  }
+
+  return { ok: true, value: parsed.data };
 }

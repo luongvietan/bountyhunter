@@ -26,6 +26,10 @@ const MAX_SERIALIZATION_RETRIES = 2;
 
 class AliasCreateConflictError extends Error {}
 
+function isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function normalizeAuditHintKey(projectHint: string): string {
   return projectHint.trim().toLowerCase();
 }
@@ -55,14 +59,30 @@ async function approveCandidate(
       leftEntity: {
         select: {
           id: true,
-          auditReports: { select: { projectHint: true } },
+          auditReports: {
+            select: {
+              id: true,
+              projectHint: true,
+              firm: true,
+              publishedAt: true,
+              reportUrl: true,
+            },
+          },
           _count: { select: { programs: true } },
         },
       },
       rightEntity: {
         select: {
           id: true,
-          auditReports: { select: { projectHint: true } },
+          auditReports: {
+            select: {
+              id: true,
+              projectHint: true,
+              firm: true,
+              publishedAt: true,
+              reportUrl: true,
+            },
+          },
           _count: { select: { programs: true } },
         },
       },
@@ -90,7 +110,7 @@ async function approveCandidate(
 
   const aliasKeys = [
     ...new Set(provisional.auditReports.map(({ projectHint }) => normalizeAuditHintKey(projectHint))),
-  ];
+  ].sort();
   if (aliasKeys.some((key) => key.length === 0)) {
     return failure('not_approvable', 'Audit report project hints must not be empty.');
   }
@@ -103,9 +123,33 @@ async function approveCandidate(
     return failure('conflict', 'An audit hint alias belongs to another entity.');
   }
 
+  const newestReport = provisional.auditReports.reduce((newest, report) => {
+    if (newest === null || report.publishedAt > newest.publishedAt) return report;
+    if (report.publishedAt.getTime() === newest.publishedAt.getTime() && report.id < newest.id) {
+      return report;
+    }
+    return newest;
+  }, null as (typeof provisional.auditReports)[number] | null);
+  const approvalEvidence = {
+    reportsMoved: provisional.auditReports.length,
+    aliasKeys,
+    newestReport: newestReport === null
+      ? null
+      : {
+          firm: newestReport.firm,
+          projectHint: newestReport.projectHint,
+          publishedAt: newestReport.publishedAt.toISOString(),
+          reportUrl: newestReport.reportUrl,
+        },
+  };
+  const updatedReason: Prisma.InputJsonObject = {
+    ...(isJsonObject(candidate.reason) ? candidate.reason : {}),
+    approvalEvidence,
+  };
+
   const claimed = await tx.mergeCandidate.updateMany({
     where: { id: candidate.id, status: 'pending' },
-    data: { status: 'approved', decidedAt: input.now },
+    data: { status: 'approved', decidedAt: input.now, reason: updatedReason },
   });
   if (claimed.count !== 1) {
     return failure('conflict', 'Merge candidate was decided by another request.');

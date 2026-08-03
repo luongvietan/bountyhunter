@@ -3,11 +3,14 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { DecisionForm } from '../src/app/merge-queue/decision-form.js';
+import { CandidateCard } from '../src/app/merge-queue/candidate-card.js';
 import { parseDecisionForm } from '../src/app/merge-queue/decision-parser.js';
+import { isDatabaseSetupError } from '../src/app/merge-queue/database-setup.js';
 import {
   inferCandidateRoles,
   listMergeQueue,
   parseQueueStatus,
+  type QueueCandidate,
   type QueueEntity,
 } from '../src/lib/merge-queue.js';
 
@@ -23,6 +26,7 @@ const provisional: QueueEntity = {
   platforms: [],
   programTitles: [],
   repoScopes: [],
+  newestReport: null,
 };
 
 const canonical: QueueEntity = {
@@ -37,7 +41,26 @@ const canonical: QueueEntity = {
   platforms: ['immunefi'],
   programTitles: ['Aave V3'],
   repoScopes: ['github.com/aave/aave-v3-origin'],
+  newestReport: null,
 };
+
+function candidate(overrides: Partial<QueueCandidate> = {}): QueueCandidate {
+  return {
+    id: 'candidate-1',
+    status: 'pending',
+    similarity: 0.84,
+    tokenJaccard: 0.8,
+    editSimilarity: 0.88,
+    approvalEvidence: null,
+    createdAt: '2026-08-04T00:00:00.000Z',
+    decidedAt: null,
+    source: provisional,
+    target: canonical,
+    approvable: true,
+    blockedReason: null,
+    ...overrides,
+  };
+}
 
 describe('merge queue read model', () => {
   it('defaults unsupported queue-status filters to pending', () => {
@@ -68,7 +91,13 @@ describe('merge queue read model', () => {
             id: provisional.id,
             slug: provisional.slug,
             canonicalName: provisional.canonicalName,
-            auditReports: [{ projectHint: 'aave-v3-review', firm: 'Trail of Bits' }],
+            auditReports: [{
+              id: 'report-1',
+              projectHint: 'aave-v3-review',
+              firm: 'Trail of Bits',
+              publishedAt: new Date('2026-08-01T00:00:00.000Z'),
+              reportUrl: 'https://reports.example/report-1',
+            }],
             programs: [],
           },
           rightEntity: {
@@ -84,6 +113,9 @@ describe('merge queue read model', () => {
           },
         }],
         groupBy: async () => [{ status: 'pending', _count: { _all: 1 } }],
+      },
+      entityAlias: {
+        findMany: async () => [],
       },
     } as unknown as PrismaClient;
 
@@ -103,6 +135,7 @@ function decisionForm(candidateId: FormDataEntryValue, action: FormDataEntryValu
   const formData = new FormData();
   formData.set('candidateId', candidateId);
   formData.set('action', action);
+  if (action === 'approve') formData.set('confirmed', 'on');
   return formData;
 }
 
@@ -154,25 +187,43 @@ describe('merge decision form parsing', () => {
       message: 'Invalid candidate decision.',
     });
   });
+
+  it('rejects approval without a server-visible confirmation', () => {
+    const formData = decisionForm('candidate-1', 'approve');
+    formData.delete('confirmed');
+
+    expect(parseDecisionForm(formData)).toEqual({
+      ok: false,
+      message: 'Confirm the candidate identities before approval.',
+    });
+  });
+
+  it.each(['repeated', 'non-text'] as const)('rejects %s approval confirmation', (kind) => {
+    const formData = decisionForm('candidate-1', 'approve');
+    if (kind === 'repeated') formData.append('confirmed', 'on');
+    else formData.set('confirmed', new File(['on'], 'confirmation.txt'));
+
+    expect(parseDecisionForm(formData)).toEqual({
+      ok: false,
+      message: 'Invalid approval confirmation.',
+    });
+  });
+
+  it.each(['reject', 'reopen'] as const)('does not require confirmation for %s', (action) => {
+    const formData = decisionForm('candidate-1', action);
+
+    expect(parseDecisionForm(formData)).toEqual({
+      ok: true,
+      value: { candidateId: 'candidate-1', action },
+    });
+  });
 });
 
 describe('merge decision controls', () => {
   it('keeps rejection independent from the required approval confirmation', () => {
     const markup = renderToStaticMarkup(
       createElement(DecisionForm, {
-        candidate: {
-          id: 'candidate-1',
-          status: 'pending',
-          similarity: 0.84,
-          tokenJaccard: 0.8,
-          editSimilarity: 0.88,
-          createdAt: '2026-08-04T00:00:00.000Z',
-          decidedAt: null,
-          source: provisional,
-          target: canonical,
-          approvable: true,
-          blockedReason: null,
-        },
+        candidate: candidate(),
       }),
     );
     const forms = [...markup.matchAll(/<form\b[\s\S]*?<\/form>/g)].map(([formMarkup]) => formMarkup);
@@ -184,5 +235,71 @@ describe('merge decision controls', () => {
     expect(approvalForm).toContain('required=""');
     expect(rejectionForm).not.toContain('type="checkbox"');
     expect(rejectionForm).not.toContain('required=""');
+  });
+
+  it('hides approval and renders the precise safety banner for a blocked candidate', () => {
+    const markup = renderToStaticMarkup(createElement(CandidateCard, {
+      candidate: candidate({
+        approvable: false,
+        blockedReason: 'Provisional entity has no audit reports to merge.',
+      }),
+    }));
+
+    expect(markup).not.toContain('Approve match');
+    expect(markup).toContain('Approval blocked');
+    expect(markup).toContain('Provisional entity has no audit reports to merge.');
+  });
+
+  it('renders newest audit report provenance with a durable URL and date', () => {
+    const newestReport = {
+      firm: 'OpenZeppelin',
+      projectHint: 'aave-v3-security',
+      publishedAt: '2026-07-03T00:00:00.000Z',
+      reportUrl: 'https://reports.example/aave-z',
+    };
+    const markup = renderToStaticMarkup(createElement(CandidateCard, {
+      candidate: candidate({ source: { ...provisional, newestReport } }),
+    }));
+
+    expect(markup).toContain('href="https://reports.example/aave-z"');
+    expect(markup).toContain('OpenZeppelin');
+    expect(markup).toContain('Jul 3, 2026');
+  });
+
+  it('renders the persisted affected count and provenance in approved history', () => {
+    const newestReport = {
+      firm: 'OpenZeppelin',
+      projectHint: 'aave-v3-security',
+      publishedAt: '2026-07-03T00:00:00.000Z',
+      reportUrl: 'https://reports.example/aave-z',
+    };
+    const markup = renderToStaticMarkup(createElement(CandidateCard, {
+      candidate: candidate({
+        status: 'approved',
+        decidedAt: '2026-08-04T08:00:00.000Z',
+        approvable: false,
+        approvalEvidence: {
+          reportsMoved: 3,
+          aliasKeys: ['aave-v3-review', 'aave-v3-security'],
+          newestReport,
+        },
+      }),
+    }));
+
+    expect(markup).toContain('3 reports moved');
+    expect(markup).toContain('2 manual aliases');
+    expect(markup).toContain('href="https://reports.example/aave-z"');
+    expect(markup).toContain('Jul 3, 2026');
+  });
+});
+
+describe('database setup errors', () => {
+  it('classifies a missing-table P2021 without exposing database details', () => {
+    expect(isDatabaseSetupError({ code: 'P2021' }, 'postgresql://configured')).toBe(true);
+    expect(isDatabaseSetupError({ code: 'P2002' }, 'postgresql://configured')).toBe(false);
+  });
+
+  it('treats a missing database URL as setup state', () => {
+    expect(isDatabaseSetupError(new Error('not connected'), undefined)).toBe(true);
   });
 });

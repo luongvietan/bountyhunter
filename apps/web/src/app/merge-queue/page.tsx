@@ -1,5 +1,6 @@
 import { prisma } from '@kritt-radar/db';
 import { CandidateCard } from './candidate-card';
+import { isDatabaseSetupError } from './database-setup';
 import {
   listMergeQueue,
   parseQueueStatus,
@@ -18,21 +19,6 @@ const tabLabels: Record<QueueStatus, string> = {
   approved: 'Approved',
   rejected: 'Rejected',
 };
-
-const setupErrorCodes = new Set(['P1000', 'P1001', 'P1002', 'P1003', 'P1012', 'P1013']);
-
-function errorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const value = (error as { code?: unknown; errorCode?: unknown }).code
-    ?? (error as { errorCode?: unknown }).errorCode;
-  return typeof value === 'string' ? value : undefined;
-}
-
-function isDatabaseSetupError(error: unknown): boolean {
-  if (!process.env.DATABASE_URL) return true;
-  const code = errorCode(error);
-  return code !== undefined && setupErrorCodes.has(code);
-}
 
 function formatSyncTime(value: string): string {
   return `${new Intl.DateTimeFormat('en', {
@@ -165,7 +151,7 @@ export default async function MergeQueueRoute({ searchParams }: MergeQueueRouteP
     const syncDate = latestRun?.finishedAt ?? latestRun?.startedAt ?? null;
     return <QueueScreen page={page} syncedAt={syncDate?.toISOString() ?? null} />;
   } catch (error) {
-    if (isDatabaseSetupError(error)) return <SetupState />;
+    if (isDatabaseSetupError(error, process.env.DATABASE_URL)) return <SetupState />;
     throw error;
   }
 }

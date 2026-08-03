@@ -1,5 +1,10 @@
-import type { CSSProperties, ReactNode } from 'react';
-import type { QueueCandidate, QueueEntity } from '../../lib/merge-queue';
+import React, { type CSSProperties, type ReactNode } from 'react';
+import type {
+  QueueApprovalEvidence,
+  QueueCandidate,
+  QueueEntity,
+  QueueReport,
+} from '../../lib/merge-queue';
 import { DecisionForm } from './decision-form';
 
 interface CandidateCardProps {
@@ -67,6 +72,45 @@ function EntityIdentity({ entity, role }: { entity: QueueEntity; role: 'Source' 
   );
 }
 
+function ReportProvenance({ report }: { report: QueueReport }) {
+  return (
+    <div className="report-provenance">
+      <h4>Newest report</h4>
+      <a href={report.reportUrl} rel="noreferrer" target="_blank">
+        Open {report.firm} report
+      </a>
+      <time dateTime={report.publishedAt}>{formatDate(report.publishedAt)}</time>
+      <span>{report.projectHint}</span>
+    </div>
+  );
+}
+
+function ApprovedEvidence({ evidence }: { evidence: QueueApprovalEvidence | null }) {
+  return (
+    <section className="approved-evidence">
+      <h3>Approved decision evidence</h3>
+      {evidence === null ? (
+        <p>
+          Approval snapshot unavailable for this legacy decision. No affected count is inferred
+          from reports that may have been combined later.
+        </p>
+      ) : (
+        <>
+          <div className="decision-impact">
+            <strong>
+              {evidence.reportsMoved} {evidence.reportsMoved === 1 ? 'report' : 'reports'} moved
+            </strong>
+            <span>
+              {evidence.aliasKeys.length} manual {evidence.aliasKeys.length === 1 ? 'alias' : 'aliases'}
+            </span>
+          </div>
+          {evidence.newestReport ? <ReportProvenance report={evidence.newestReport} /> : null}
+        </>
+      )}
+    </section>
+  );
+}
+
 function CandidateEvidence({ source, target }: { source: QueueEntity; target: QueueEntity }) {
   return (
     <div className="evidence-columns">
@@ -81,6 +125,7 @@ function CandidateEvidence({ source, target }: { source: QueueEntity; target: Qu
             <dd><TextList empty="No audit firms" values={source.auditFirms} /></dd>
           </div>
         </dl>
+        {source.newestReport ? <ReportProvenance report={source.newestReport} /> : null}
       </EvidenceList>
       <EvidenceList title={`Program evidence · ${target.programCount}`}>
         <dl className="evidence-facts">
@@ -115,6 +160,7 @@ export function CandidateCard({ candidate }: CandidateCardProps) {
       similarity: candidate.similarity,
       tokenJaccard: candidate.tokenJaccard,
       editSimilarity: candidate.editSimilarity,
+      approvalEvidence: candidate.approvalEvidence,
       candidateId: candidate.id,
     },
     null,
@@ -170,6 +216,10 @@ export function CandidateCard({ candidate }: CandidateCardProps) {
             Entity roles cannot be assigned safely from the current evidence.
           </p>
         )}
+
+        {candidate.status === 'approved' ? (
+          <ApprovedEvidence evidence={candidate.approvalEvidence} />
+        ) : null}
 
         {candidate.blockedReason ? (
           <div className="conflict-banner" role="note">
