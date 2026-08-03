@@ -111,10 +111,48 @@ export interface ScopeRecord {
   addedAt: Date | null;
 }
 
+export interface ProgramAuditRecord {
+  /** Khoá duy nhất toàn cục do Immunefi cấp. */
+  auditId: string;
+  firm: string;
+  publishedAt: Date;
+  /**
+   * URL neo về chính program.
+   *
+   * KHÔNG dùng url gốc của Immunefi làm khoá: 237 audit chỉ có 222 url khác
+   * nhau, nên nó trùng và sẽ va vào ràng buộc unique của AuditReport.
+   */
+  reportUrl: string;
+}
+
 export interface MultiScopeRecord {
   program: ProgramFields;
   scopes: ScopeRecord[];
+  audits: ProgramAuditRecord[];
   changedAt: Date | null;
+}
+
+/**
+ * Audit mà Immunefi khai ngay trên program.
+ *
+ * Đây là cầu nối duy nhất hiện có giữa bằng chứng audit và repo: nó gắn sẵn vào
+ * program nên không phải khớp tên dự án, cách vốn chỉ trúng dưới 1%.
+ */
+function toProgramAudits(payload: ImmunefiProgramPayload): ProgramAuditRecord[] {
+  const byId = new Map<string, ProgramAuditRecord>();
+  for (const audit of payload.audits ?? []) {
+    const publishedAt = toDate(audit.date);
+    // Ngày hỏng thì bỏ: một mốc audit sai còn tệ hơn không có mốc nào, vì
+    // audit_gap sẽ tính diff từ một điểm không tồn tại.
+    if (!publishedAt) continue;
+    byId.set(audit.auditId, {
+      auditId: audit.auditId,
+      firm: audit.auditor?.trim() || 'unknown',
+      publishedAt,
+      reportUrl: `https://immunefi.com/bounty/${payload.externalId}/#audit-${audit.auditId}`,
+    });
+  }
+  return [...byId.values()].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
 }
 
 function isImmunefiPayload(v: unknown): v is ImmunefiProgramPayload {
@@ -173,6 +211,7 @@ export function toImmunefiRecords(rows: readonly LatestObservation[]): MultiScop
         endsAt: null,
       },
       scopes: [...byRepo.values()],
+      audits: toProgramAudits(p),
       changedAt: row.changedAt,
     });
   }

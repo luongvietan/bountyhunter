@@ -16,6 +16,13 @@ const RawAsset = z.object({
   addedAt: z.string().optional(),
 });
 
+const RawAudit = z.object({
+  id: z.string(),
+  auditor: z.string().nullish(),
+  date: z.string(),
+  url: z.string().nullish(),
+});
+
 const RawProject = z.object({
   slug: z.string(),
   project: z.string(),
@@ -25,6 +32,7 @@ const RawProject = z.object({
   updatedDate: z.string().nullish(),
   inviteOnly: z.boolean().nullish(),
   assets: z.array(z.unknown()).optional(),
+  audits: z.array(z.unknown()).optional(),
 });
 
 export interface ImmunefiAsset {
@@ -32,6 +40,15 @@ export interface ImmunefiAsset {
   repoKey: string;
   type: string | null;
   addedAt: string | null;
+}
+
+export interface ImmunefiAudit {
+  /** Khoá ổn định của Immunefi. Dùng cái này, KHÔNG dùng `url` — url trùng nhau. */
+  auditId: string;
+  auditor: string | null;
+  /** ISO. Đã kiểm tra parse được ngay lúc thu thập. */
+  date: string;
+  sourceUrl: string | null;
 }
 
 export interface ImmunefiProgramPayload {
@@ -45,6 +62,34 @@ export interface ImmunefiProgramPayload {
   publishedAt: string | null;
   updatedAt: string | null;
   assets: ImmunefiAsset[];
+  /**
+   * Audit mà Immunefi khai cho chính program này.
+   *
+   * Giá trị nằm ở chỗ nó gắn sẵn vào program, mà program đã liên kết tới scope,
+   * nên `audit_gap` có mốc thời gian thật mà không cần khớp tên dự án — cách
+   * khớp tên chỉ trúng dưới 1%.
+   */
+  audits: ImmunefiAudit[];
+}
+
+function parseAudits(raw: unknown): ImmunefiAudit[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ImmunefiAudit[] = [];
+  for (const item of raw) {
+    const parsed = RawAudit.safeParse(item);
+    if (!parsed.success) continue;
+    const a = parsed.data;
+    // Ngày hỏng thì bỏ hẳn: một mốc audit sai còn tệ hơn không có mốc nào, vì nó
+    // làm audit_gap tính diff từ một điểm không có thật.
+    if (!Number.isFinite(Date.parse(a.date))) continue;
+    out.push({
+      auditId: a.id,
+      auditor: a.auditor ?? null,
+      date: a.date,
+      sourceUrl: a.url ?? null,
+    });
+  }
+  return out;
 }
 
 export function parseImmunefiProjects(raw: unknown): Array<{
@@ -97,6 +142,7 @@ export function parseImmunefiProjects(raw: unknown): Array<{
       publishedAt: p.launchDate ?? null,
       updatedAt: p.updatedDate ?? null,
       assets,
+      audits: parseAudits(p.audits),
     };
     out.push(makeObservation('immunefi-programs', payload.url, payload));
   }
