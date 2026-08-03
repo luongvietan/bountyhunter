@@ -6,7 +6,25 @@ import {
 import { normalizeRepoUrl, type SignalValue } from '@kritt-radar/core';
 import type { Prisma, PrismaClient } from '@kritt-radar/db';
 import { z } from 'zod';
-import { extractAuditGap } from './extractors/audit-gap.js';
+import { extractAuditGap, type AuditCoverage } from './extractors/audit-gap.js';
+
+/** Các collector có thể cung cấp bằng chứng "repo này đã được audit". */
+const AUDIT_SOURCE_COLLECTORS = ['audit-report-repos'];
+
+/**
+ * Đã có nguồn audit nào chạy thành công chưa.
+ *
+ * Nếu chưa, `lastAuditAt = null` trên mọi scope chỉ phản ánh việc ta chưa đi
+ * tìm, không phải việc repo chưa được audit — và audit_gap phải im lặng thay vì
+ * chấm điểm tối đa cho tất cả.
+ */
+export async function resolveAuditCoverage(prisma: PrismaClient): Promise<AuditCoverage> {
+  const ok = await prisma.collectorRun.findFirst({
+    where: { collectorId: { in: AUDIT_SOURCE_COLLECTORS }, status: 'ok' },
+    select: { id: true },
+  });
+  return ok ? 'searched' : 'unsearched';
+}
 
 const ESTIMATED_LOC_CONFIDENCE = 0.7;
 const TRUNCATED_CONFIDENCE_CAP = 0.35;
@@ -128,6 +146,7 @@ function evidenceBase(
 export function snapshotToAuditGap(
   snapshot: RepoSnapshotPayload,
   expected: RepoTarget,
+  auditCoverage: AuditCoverage = 'unsearched',
 ): SignalValue {
   if (!RepoSnapshotSchema.safeParse(snapshot).success) {
     return noDataSignal(expected, 'invalid_snapshot');
@@ -162,6 +181,7 @@ export function snapshotToAuditGap(
     pathGlobs: expected.pathGlobs,
     totalLoc: snapshot.totalLoc,
     hasCommitData: true,
+    auditCoverage,
     ...(lastAuditAt === null
       ? {}
       : {
@@ -171,9 +191,13 @@ export function snapshotToAuditGap(
           },
         }),
   });
-  const confidence = snapshot.truncated
+  // Lấy min chứ không ghi đè: chất lượng snapshot và độ chắc chắn của chính
+  // extractor là hai nguồn nghi ngờ độc lập, cái nào yếu hơn thì quyết định.
+  // Ghi đè thẳng sẽ nuốt mất confidence 0 của nhánh "chưa quét audit".
+  const snapshotConfidence = snapshot.truncated
     ? Math.min(ESTIMATED_LOC_CONFIDENCE, TRUNCATED_CONFIDENCE_CAP)
     : ESTIMATED_LOC_CONFIDENCE;
+  const confidence = Math.min(snapshotConfidence, calculated.confidence);
 
   return {
     type: calculated.type,
@@ -276,7 +300,8 @@ function noDataSignal(target: RepoTarget, reason: string, error?: string): Signa
 export async function materializeRepoSignals(
   prisma: PrismaClient,
   now: Date,
-): Promise<{ scopes: number; noData: number }> {
+): Promise<{ scopes: number; noData: number; auditCoverage: AuditCoverage }> {
+  const auditCoverage = await resolveAuditCoverage(prisma);
   const targets = await listRepoTargets(prisma);
   const sourceUrls = [...new Set(targets.map(githubRepoSnapshotSourceKey))];
   const observations = sourceUrls.length === 0
@@ -306,7 +331,7 @@ export async function materializeRepoSignals(
     const parsed = observation ? RepoSnapshotSchema.safeParse(observation.payload) : null;
     const snapshot: RepoSnapshotPayload | null = parsed?.success ? parsed.data : null;
     const signal = snapshot
-      ? snapshotToAuditGap(snapshot, target)
+      ? snapshotToAuditGap(snapshot, target, auditCoverage)
       : noDataSignal(
           target,
           observation ? 'invalid_snapshot' : 'no_snapshot',
@@ -343,5 +368,5 @@ export async function materializeRepoSignals(
     });
   }
 
-  return { scopes: targets.length, noData };
+  return { scopes: targets.length, noData, auditCoverage };
 }

@@ -11,7 +11,7 @@ export interface ScoreContribution {
   type: SignalType;
   value: number;
   confidence: number;
-  /** Trọng số đã chuẩn hoá lại, cộng tất cả bằng 1. */
+  /** Trọng số đã nhân confidence rồi chuẩn hoá lại, cộng tất cả bằng 1. */
   normalizedWeight: number;
   /** Số điểm tín hiệu này đóng góp vào tổng. */
   contribution: number;
@@ -32,6 +32,13 @@ export interface ScoreResult {
  * lại trên phần còn lại — chứ không bị tính như value=0. Nếu tính như 0, một
  * target chỉ vì thiếu dữ liệu sẽ tụt hạng y như một target thật sự kém, và
  * bảng xếp hạng sẽ ưu ái những target dễ crawl thay vì những target đáng làm.
+ *
+ * Confidence không chỉ là cổng chặn mà còn nhân thẳng vào trọng số. Nếu chỉ
+ * chặn, một phỏng đoán 1.0 ở confidence 0.35 đóng góp y hệt một phép đo 1.0 ở
+ * confidence 0.7, và những target ta biết ít nhất lại leo lên đầu bảng bằng
+ * chính sự thiếu hiểu biết đó. Nhân vào trọng số rồi chuẩn hoá lại giữ nguyên
+ * hành vi ở hai đầu mút — confidence 0 vẫn bị loại, các tín hiệu cùng độ tin cậy
+ * vẫn chia đều — nhưng liên tục ở khoảng giữa.
  */
 export function score(signals: readonly SignalValue[], weights: Weights): ScoreResult {
   const used: SignalValue[] = [];
@@ -43,14 +50,17 @@ export function score(signals: readonly SignalValue[], weights: Weights): ScoreR
     else skipped.push(s.type);
   }
 
-  const totalWeight = used.reduce((acc, s) => acc + (weights.weights[s.type] ?? 0), 0);
+  const effectiveWeight = (s: SignalValue): number =>
+    (weights.weights[s.type] ?? 0) * clamp01(s.confidence);
+
+  const totalWeight = used.reduce((acc, s) => acc + effectiveWeight(s), 0);
 
   if (totalWeight <= 0) {
     return { total: 0, breakdown: [], usedSignals: 0, skipped, weightsVersion: weights.version };
   }
 
   const breakdown: ScoreContribution[] = used.map((s) => {
-    const normalizedWeight = (weights.weights[s.type] ?? 0) / totalWeight;
+    const normalizedWeight = effectiveWeight(s) / totalWeight;
     return {
       type: s.type,
       value: s.value,

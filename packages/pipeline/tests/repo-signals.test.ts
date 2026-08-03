@@ -47,7 +47,7 @@ describe('snapshotToAuditGap', () => {
     expect(signal.confidence).toBe(0.7);
   });
 
-  it('represents a complete target with no public audit as a full audit gap', () => {
+  it('represents a searched target with no public audit as a full but hedged audit gap', () => {
     const noAuditTarget: RepoTarget = { ...target, lastAuditAt: null, coveredCommit: null };
     const noAudit: RepoSnapshotPayload = {
       ...completeAudited,
@@ -56,15 +56,35 @@ describe('snapshotToAuditGap', () => {
       commits: [],
     };
 
-    const signal = snapshotToAuditGap(noAudit, noAuditTarget);
+    const signal = snapshotToAuditGap(noAudit, noAuditTarget, 'searched');
 
     expect(signal.value).toBe(1);
-    expect(signal.confidence).toBe(0.7);
+    // Confidence is the weaker of snapshot quality (0.7) and the extractor's own
+    // hedge about incomplete audit-source coverage (0.35).
+    expect(signal.confidence).toBe(0.35);
     expect(signal.evidence).toMatchObject({
       reason: 'no_public_audit',
       files: ['src/Pool.sol', 'src/Router.sol'],
       changedLoc: 0,
     });
+  });
+
+  it('stays silent when no audit source has ever run', () => {
+    const noAuditTarget: RepoTarget = { ...target, lastAuditAt: null, coveredCommit: null };
+    const noAudit: RepoSnapshotPayload = {
+      ...completeAudited,
+      cutoff: { lastAuditAt: null, baseCommit: null },
+      changedFiles: [],
+      commits: [],
+    };
+
+    // Default coverage is 'unsearched': a null audit date only means we never
+    // looked, so scoring it as a maximal gap would hand every repo full marks.
+    const signal = snapshotToAuditGap(noAudit, noAuditTarget);
+
+    expect(signal.confidence).toBe(0);
+    expect(signal.value).toBe(0);
+    expect(signal.evidence).toMatchObject({ reason: 'audit_coverage_unknown' });
   });
 
   it('marks a failed snapshot as no data without interpreting zeroes as evidence', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractAuditGap } from '../src/extractors/audit-gap.js';
+import { extractAuditGap, UNAUDITED_CONFIDENCE } from '../src/extractors/audit-gap.js';
 import type { CommitRecord } from '@kritt-radar/collectors';
 
 const commits: CommitRecord[] = [
@@ -64,11 +64,41 @@ describe('extractAuditGap', () => {
     expect(big).toBeGreaterThan(small);
   });
 
-  it('chưa từng có audit công khai thì value = 1', () => {
-    const s = extractAuditGap({ commits, lastAuditAt: null, pathGlobs: [], totalLoc: 5000 });
+  it('đã quét mà không thấy audit thì value = 1 nhưng confidence dưới 1', () => {
+    const s = extractAuditGap({
+      commits,
+      lastAuditAt: null,
+      pathGlobs: [],
+      totalLoc: 5000,
+      auditCoverage: 'searched',
+    });
     expect(s.value).toBe(1);
     expect(s.evidence.reason).toBe('no_public_audit');
-    expect(s.confidence).toBe(1);
+    // Không phải 1.0: nguồn audit ta quét chỉ phủ vài hãng trong hàng trăm hãng,
+    // nên "không tìm thấy" là bằng chứng yếu chứ không phải kết luận.
+    expect(s.confidence).toBe(UNAUDITED_CONFIDENCE);
+    expect(s.confidence).toBeLessThan(1);
+  });
+
+  it('BẤT BIẾN: chưa quét nguồn audit nào thì confidence 0, không phải value 1', () => {
+    // Nếu nhánh này trả 1.0 thì MỌI repo được điểm tối đa và audit_gap mất sạch
+    // khả năng phân biệt trong khi vẫn ăn đủ trọng số.
+    const s = extractAuditGap({ commits, lastAuditAt: null, pathGlobs: [], totalLoc: 5000 });
+    expect(s.confidence).toBe(0);
+    expect(s.value).toBe(0);
+    expect(s.evidence.reason).toBe('audit_coverage_unknown');
+  });
+
+  it('mặc định là chưa quét khi người gọi không khai báo', () => {
+    const explicit = extractAuditGap({
+      commits,
+      lastAuditAt: null,
+      pathGlobs: [],
+      totalLoc: 5000,
+      auditCoverage: 'unsearched',
+    });
+    const implicit = extractAuditGap({ commits, lastAuditAt: null, pathGlobs: [], totalLoc: 5000 });
+    expect(implicit).toEqual(explicit);
   });
 
   it('không có commit nào sau audit thì value = 0 với confidence đầy đủ', () => {

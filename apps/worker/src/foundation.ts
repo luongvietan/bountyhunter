@@ -12,6 +12,7 @@ import {
   toAuditReportRecords,
   toImmunefiRecords,
   toProgramRecords,
+  type ProgramAuditRecord,
   type ProgramFields,
 } from '@kritt-radar/pipeline';
 
@@ -25,7 +26,11 @@ type ScopeInput = {
   pathGlobs: string[];
   addedAt: Date | null;
 };
-type ProgramInput = { program: ProgramFields; scopes: ScopeInput[] };
+type ProgramInput = {
+  program: ProgramFields;
+  scopes: ScopeInput[];
+  audits?: ProgramAuditRecord[];
+};
 type CandidateScoreReason = { tokenJaccard: number; editSimilarity: number };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -85,7 +90,10 @@ export interface FoundationResult {
   programs: number;
   scopes: number;
   entities: number;
+  /** Report lấy từ repo của các hãng audit; phải đoán xem thuộc dự án nào. */
   reports: number;
+  /** Audit do chính nền tảng khai trên program; nối chắc chắn, không phải đoán. */
+  programAudits: number;
   candidates: number;
 }
 
@@ -204,7 +212,7 @@ async function upsertProgram(
   tx: Transaction,
   input: ProgramInput,
   now: Date,
-): Promise<{ entityId: string; scopes: number }> {
+): Promise<{ entityId: string; scopes: number; audits: number }> {
   const entityId = await resolveProgramEntity(tx, input.program, input.scopes);
   const saved = await tx.program.upsert({
     where: {
@@ -257,7 +265,43 @@ async function upsertProgram(
       },
     });
   }
-  return { entityId, scopes: input.scopes.length };
+  const audits = await upsertProgramAudits(tx, entityId, input);
+  return { entityId, scopes: input.scopes.length, audits };
+}
+
+/**
+ * Ghi audit mà nền tảng khai sẵn cho program, gắn vào chính entity của program.
+ *
+ * Khác hẳn `materializeAudits`: ở đó report đến từ repo của các hãng audit nên
+ * phải đoán xem nó thuộc dự án nào (khớp tên, trúng dưới 1%). Ở đây nguồn đã nói
+ * rõ audit này của program nào, nên liên kết là chắc chắn theo cấu trúc.
+ */
+async function upsertProgramAudits(
+  tx: Transaction,
+  entityId: string,
+  input: ProgramInput,
+): Promise<number> {
+  const audits = input.audits ?? [];
+  for (const audit of audits) {
+    await tx.auditReport.upsert({
+      where: { reportUrl: audit.reportUrl },
+      create: {
+        entityId,
+        firm: audit.firm,
+        publishedAt: audit.publishedAt,
+        projectHint: input.program.externalId,
+        reportUrl: audit.reportUrl,
+        observationIds: [],
+      },
+      update: {
+        entityId,
+        firm: audit.firm,
+        publishedAt: audit.publishedAt,
+        projectHint: input.program.externalId,
+      },
+    });
+  }
+  return audits.length;
 }
 
 async function materializeCatalog(
@@ -265,16 +309,18 @@ async function materializeCatalog(
   aliases: ReturnType<typeof parseAliases>,
   programs: readonly ProgramInput[],
   now: Date,
-): Promise<{ programs: number; scopes: number; entityIds: Set<string> }> {
+): Promise<{ programs: number; scopes: number; programAudits: number; entityIds: Set<string> }> {
   return prisma.$transaction(async (tx) => {
     const entityIds = await syncConfigAliases(tx, aliases);
     let scopes = 0;
+    let programAudits = 0;
     for (const program of programs) {
       const saved = await upsertProgram(tx, program, now);
       entityIds.add(saved.entityId);
       scopes += saved.scopes;
+      programAudits += saved.audits;
     }
-    return { programs: programs.length, scopes, entityIds };
+    return { programs: programs.length, scopes, programAudits, entityIds };
   });
 }
 
@@ -403,6 +449,7 @@ export async function materializeCatalogFoundation(
     (record): ProgramInput => ({
       program: record.program,
       scopes: record.scopes,
+      audits: record.audits,
     }),
   );
 
@@ -419,6 +466,7 @@ export async function materializeCatalogFoundation(
     scopes: catalog.scopes,
     entities: entityIds.size,
     reports: audits.reports,
+    programAudits: catalog.programAudits,
     candidates: audits.candidates,
   };
 }

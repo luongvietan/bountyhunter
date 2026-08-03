@@ -177,4 +177,75 @@ describe('toImmunefiRecords', () => {
       toImmunefiRecords([{ sourceUrl: 'u', changedAt: new Date(), payload: { nope: 1 } }]),
     ).toEqual([]);
   });
+
+  it('không có trường audits thì trả mảng rỗng, không phải undefined', () => {
+    expect(toImmunefiRecords([row])[0]!.audits).toEqual([]);
+  });
+});
+
+describe('toImmunefiRecords — cầu nối audit', () => {
+  const withAudits = {
+    sourceUrl: 'https://immunefi.com/bounty/hedera/',
+    changedAt: new Date('2026-08-03T00:00:00Z'),
+    payload: {
+      platform: 'immunefi',
+      externalId: 'hedera',
+      title: 'Hedera',
+      url: 'https://immunefi.com/bounty/hedera/',
+      poolUsd: 1000000,
+      maxBountyUsd: 30000,
+      kind: 'bounty',
+      publishedAt: '2025-02-05T04:21:00.000Z',
+      updatedAt: null,
+      assets: [
+        { assetId: 'a1', repoKey: 'github.com/hiero-ledger/x', type: null, addedAt: null },
+      ],
+      audits: [
+        { auditId: '1405', auditor: 'ChainSecurity', date: '2026-06-30T00:00:00.000Z', sourceUrl: 'https://hedera.com/kc' },
+        { auditId: '900', auditor: 'Halborn', date: '2024-01-15T00:00:00.000Z', sourceUrl: 'https://hedera.com/kc' },
+      ],
+    },
+  };
+
+  it('chuyển audits thành bản ghi có ngày, mới nhất đứng trước', () => {
+    const audits = toImmunefiRecords([withAudits])[0]!.audits;
+    expect(audits).toHaveLength(2);
+    expect(audits[0]!.publishedAt).toEqual(new Date('2026-06-30T00:00:00.000Z'));
+    expect(audits[0]!.firm).toBe('ChainSecurity');
+  });
+
+  it('khoá theo auditId chứ không theo url — url của Immunefi bị trùng', () => {
+    // 237 audit thật chỉ có 222 url khác nhau; khoá theo url sẽ đánh mất bản ghi
+    // và va vào ràng buộc unique của AuditReport.
+    const urls = toImmunefiRecords([withAudits])[0]!.audits.map((a) => a.reportUrl);
+    expect(new Set(urls).size).toBe(2);
+    expect(urls).toContain('https://immunefi.com/bounty/hedera/#audit-1405');
+  });
+
+  it('loại audit có ngày hỏng thay vì tạo mốc giả', () => {
+    const audits = toImmunefiRecords([
+      {
+        ...withAudits,
+        payload: {
+          ...withAudits.payload,
+          audits: [{ auditId: 'z', auditor: 'X', date: 'not-a-date', sourceUrl: null }],
+        },
+      },
+    ])[0]!.audits;
+    expect(audits).toEqual([]);
+  });
+
+  it('auditor thiếu thì ghi "unknown" chứ không bỏ mốc audit', () => {
+    const audits = toImmunefiRecords([
+      {
+        ...withAudits,
+        payload: {
+          ...withAudits.payload,
+          audits: [{ auditId: 'z', auditor: null, date: '2026-01-01T00:00:00.000Z', sourceUrl: null }],
+        },
+      },
+    ])[0]!.audits;
+    expect(audits).toHaveLength(1);
+    expect(audits[0]!.firm).toBe('unknown');
+  });
 });

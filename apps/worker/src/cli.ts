@@ -91,7 +91,8 @@ async function materializeCatalog(): Promise<void> {
   const result = await materializeCatalogFoundation(prisma, aliasesYaml, new Date());
   console.log(
     `[catalog] foundation: ${result.programs} programs / ${result.scopes} scopes / ` +
-      `${result.entities} entities / ${result.reports} reports / ${result.candidates} candidates` +
+      `${result.entities} entities / ${result.reports} firm-reports / ` +
+      `${result.programAudits} program-audits / ${result.candidates} candidates` +
       (droppedNoRepo > 0 ? `  (${droppedNoRepo} dropped: no repo in list endpoint)` : ''),
   );
 }

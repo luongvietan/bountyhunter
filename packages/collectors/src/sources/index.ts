@@ -28,6 +28,7 @@ export {
   AUDIT_REPO_SOURCES,
   type AuditReportPayload,
 } from './audit-report-repos.js';
+export type { ImmunefiAudit } from './immunefi-programs.js';
 export {
   immunefiPrograms,
   parseImmunefiProjects,
