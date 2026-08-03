@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "cli": "tsx --env-file=../../.env src/cli.ts"
+    "cli": "tsx --env-file=../../.env src/cli.ts",
+    "test:integration": "vitest run --config ../../vitest.integration.config.ts"
   },
   "dependencies": {
     "@kritt-radar/collectors": "workspace:*",

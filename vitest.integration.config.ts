@@ -1,12 +1,10 @@
 import { resolve } from 'node:path';
-import { configDefaults, defineConfig } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 
 const pkg = (name: string) => resolve(import.meta.dirname, `packages/${name}/src/index.ts`);
 
 export default defineConfig({
   resolve: {
-    // Trỏ thẳng vào src: package.json khai `main: dist/index.js`, mà test chạy
-    // trên nguồn TypeScript nên không muốn phải build trước mỗi lần chạy test.
     alias: {
       '@kritt-radar/core': pkg('core'),
       '@kritt-radar/collectors': pkg('collectors'),
@@ -15,8 +13,11 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['packages/**/tests/**/*.test.ts', 'apps/**/tests/**/*.test.ts'],
-    exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
+    include: ['apps/**/tests/**/*.integration.test.ts'],
     environment: 'node',
+    pool: 'forks',
+    poolOptions: { forks: { singleFork: true } },
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

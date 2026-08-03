@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseWeights, type SignalValue } from '@kritt-radar/core';
 import {
+  auditReportRepos,
   c4Contests,
   cantinaCompetitions,
   immunefiPrograms,
@@ -9,22 +10,19 @@ import {
   sherlockContests,
 } from '@kritt-radar/collectors';
 import { prisma, saveObservations } from '@kritt-radar/db';
-import {
-  extractFreshness,
-  latestBySourceUrl,
-  rankScopes,
-  toImmunefiRecords,
-  toProgramRecords,
-  type ProgramFields,
-  type ScopeSignals,
-} from '@kritt-radar/pipeline';
+import { rankScopes, type ScopeSignals } from '@kritt-radar/pipeline';
+import { materializeCatalogFoundation } from './foundation.js';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 
-const CONTEST_COLLECTORS = ['c4-contests', 'sherlock-contests', 'cantina-competitions'];
-
 async function collect(): Promise<void> {
-  const collectors = [c4Contests, sherlockContests, cantinaCompetitions, immunefiPrograms];
+  const collectors = [
+    c4Contests,
+    sherlockContests,
+    cantinaCompetitions,
+    immunefiPrograms,
+    auditReportRepos,
+  ];
 
   for (const c of collectors) {
     const run = await runCollector(c, {
@@ -48,112 +46,12 @@ async function collect(): Promise<void> {
   }
 }
 
-/** Ghi Program + Scope, rồi tính lại freshness cho từng scope. */
-async function upsertProgram(
-  program: ProgramFields,
-  scopes: ReadonlyArray<{ hardKey: string; repoUrl: string; pathGlobs: string[] }>,
-  freshnessAt: ReadonlyArray<Date | null>,
-  now: Date,
-): Promise<number> {
-  const saved = await prisma.program.upsert({
-    where: {
-      platform_externalId: { platform: program.platform, externalId: program.externalId },
-    },
-    create: program,
-    update: program,
-  });
-
-  for (const [i, sc] of scopes.entries()) {
-    const existing = await prisma.scope.findFirst({
-      where: { programId: saved.id, hardKey: sc.hardKey },
-    });
-    const scope =
-      existing ??
-      (await prisma.scope.create({
-        data: {
-          programId: saved.id,
-          kind: 'repo',
-          hardKey: sc.hardKey,
-          repoUrl: sc.repoUrl,
-          pathGlobs: sc.pathGlobs,
-        },
-      }));
-
-    // addedAt của asset chính xác hơn ngày mở program: một repo thêm hôm qua
-    // vào một program mở từ 2025 vẫn là scope mới tinh.
-    const freshness = extractFreshness(
-      {
-        publishedAt: program.publishedAt ?? undefined,
-        scopeChangedAt: freshnessAt[i] ?? undefined,
-      },
-      now,
-    );
-
-    await prisma.signal.upsert({
-      where: { scopeId_type: { scopeId: scope.id, type: freshness.type } },
-      create: {
-        scopeId: scope.id,
-        type: freshness.type,
-        value: freshness.value,
-        confidence: freshness.confidence,
-        evidence: freshness.evidence as never,
-        observationIds: [],
-      },
-      update: {
-        value: freshness.value,
-        confidence: freshness.confidence,
-        evidence: freshness.evidence as never,
-        computedAt: now,
-      },
-    });
-  }
-
-  return scopes.length;
-}
-
 async function materialize(): Promise<void> {
-  const now = new Date();
-
-  const contestRows = await prisma.observation.findMany({
-    where: { collectorId: { in: CONTEST_COLLECTORS } },
-    select: { sourceUrl: true, fetchedAt: true, payload: true },
-  });
-  const latestContests = latestBySourceUrl(contestRows);
-  const contests = toProgramRecords(latestContests);
-  // Không im lặng cắt dữ liệu: một collector trả 50 program mà 50 cái đều rơi
-  // vì thiếu repo trông y hệt "hôm nay không có gì mới".
-  const droppedNoRepo = latestContests.length - contests.length;
-
-  let contestScopes = 0;
-  for (const r of contests) {
-    contestScopes += await upsertProgram(
-      r.program,
-      [r.scope],
-      [r.changedAt],
-      now,
-    );
-  }
-
-  const immunefiRows = await prisma.observation.findMany({
-    where: { collectorId: 'immunefi-programs' },
-    select: { sourceUrl: true, fetchedAt: true, payload: true },
-  });
-  const immunefi = toImmunefiRecords(latestBySourceUrl(immunefiRows));
-
-  let immunefiScopes = 0;
-  for (const r of immunefi) {
-    immunefiScopes += await upsertProgram(
-      r.program,
-      r.scopes,
-      r.scopes.map((s) => s.addedAt),
-      now,
-    );
-  }
-
+  const aliasesYaml = await readFile(resolve(ROOT, 'config/aliases.yml'), 'utf8');
+  const result = await materializeCatalogFoundation(prisma, aliasesYaml, new Date());
   console.log(
-    `contests: ${contests.length} programs / ${contestScopes} scopes` +
-      (droppedNoRepo > 0 ? `  (${droppedNoRepo} dropped: no repo in list endpoint)` : '') +
-      `\nimmunefi: ${immunefi.length} programs / ${immunefiScopes} scopes`,
+    `foundation: ${result.programs} programs / ${result.scopes} scopes / ` +
+      `${result.entities} entities / ${result.reports} reports / ${result.candidates} candidates`,
   );
 }
 
