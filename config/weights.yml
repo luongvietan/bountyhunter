@@ -1,0 +1,10 @@
+# V1 để trọng số bằng nhau: hiện chưa có dữ liệu nào nói tín hiệu nào quan trọng
+# hơn. Bảng Outcome (pha 2) sẽ trả lời câu đó. Đổi trọng số thì tăng version để
+# so sánh được hai bộ trên cùng tập dữ liệu.
+version: v1-equal
+minConfidence: 0.3
+weights:
+  audit_gap: 1
+  freshness: 1
+  competition: 1
+  value_at_risk: 1
