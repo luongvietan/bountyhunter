@@ -11,7 +11,7 @@ import {
 } from '@kritt-radar/collectors';
 import { prisma, saveObservations } from '@kritt-radar/db';
 import { rankScopes, type ScopeSignals } from '@kritt-radar/pipeline';
-import { materializeCatalogFoundation } from './foundation.js';
+import { countDroppedContestPrograms, materializeCatalogFoundation } from './foundation.js';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 
@@ -48,10 +48,12 @@ async function collect(): Promise<void> {
 
 async function materialize(): Promise<void> {
   const aliasesYaml = await readFile(resolve(ROOT, 'config/aliases.yml'), 'utf8');
+  const droppedNoRepo = await countDroppedContestPrograms(prisma);
   const result = await materializeCatalogFoundation(prisma, aliasesYaml, new Date());
   console.log(
     `foundation: ${result.programs} programs / ${result.scopes} scopes / ` +
-      `${result.entities} entities / ${result.reports} reports / ${result.candidates} candidates`,
+      `${result.entities} entities / ${result.reports} reports / ${result.candidates} candidates` +
+      (droppedNoRepo > 0 ? `  (${droppedNoRepo} dropped: no repo in list endpoint)` : ''),
   );
 }
 

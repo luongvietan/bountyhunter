@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { normalizeRepoUrl } from '@kritt-radar/core';
 import type { Prisma, PrismaClient } from '@kritt-radar/db';
 import {
@@ -33,6 +34,30 @@ export interface FoundationResult {
   candidates: number;
 }
 
+async function loadContestPrograms(
+  prisma: PrismaClient,
+): Promise<{ programs: ProgramInput[]; droppedNoRepo: number }> {
+  const rows = await prisma.observation.findMany({
+    where: { collectorId: { in: CONTEST_COLLECTORS } },
+    select: { sourceUrl: true, fetchedAt: true, payload: true },
+  });
+  const latest = latestBySourceUrl(rows);
+  const records = toProgramRecords(latest);
+  return {
+    droppedNoRepo: latest.length - records.length,
+    programs: records.map(
+      (record): ProgramInput => ({
+        program: record.program,
+        scopes: [{ ...record.scope, addedAt: record.changedAt }],
+      }),
+    ),
+  };
+}
+
+export async function countDroppedContestPrograms(prisma: PrismaClient): Promise<number> {
+  return (await loadContestPrograms(prisma)).droppedNoRepo;
+}
+
 function platformNameKey(platform: string, title: string): string {
   return `${platform.trim().toLowerCase()} ${title.trim()}`;
 }
@@ -40,7 +65,7 @@ function platformNameKey(platform: string, title: string): string {
 async function syncConfigAliases(
   tx: Transaction,
   aliases: ReturnType<typeof parseAliases>,
-): Promise<void> {
+): Promise<Set<string>> {
   const entries = [
     ...[...aliases.byRepoKey].map(([key, target]) => ({ kind: 'repo', key, target })),
     ...[...aliases.byPlatformName].map(([key, target]) => ({
@@ -54,6 +79,7 @@ async function syncConfigAliases(
       target,
     })),
   ];
+  const entityIds = new Set<string>();
 
   for (const { kind, key, target } of entries) {
     const entity = await tx.entity.upsert({
@@ -61,15 +87,28 @@ async function syncConfigAliases(
       create: target,
       update: { canonicalName: target.canonicalName },
     });
-    const existing = await tx.entityAlias.findUnique({ where: { kind_key: { kind, key } } });
-    if (existing?.source === 'manual') continue;
-
-    await tx.entityAlias.upsert({
-      where: { kind_key: { kind, key } },
-      create: { entityId: entity.id, kind, key, source: 'config' },
-      update: { entityId: entity.id, source: 'config' },
-    });
+    entityIds.add(entity.id);
+    await tx.$executeRaw`
+      INSERT INTO "EntityAlias" ("id", "entityId", "kind", "key", "source")
+      VALUES (${randomUUID()}, ${entity.id}, ${kind}, ${key}, 'config')
+      ON CONFLICT ("kind", "key") DO UPDATE
+      SET "entityId" = EXCLUDED."entityId", "source" = 'config'
+      WHERE "EntityAlias"."source" = 'config'
+    `;
   }
+
+  const desiredKeys = new Set(entries.map(({ kind, key }) => `${kind}\u0000${key}`));
+  const configAliases = await tx.entityAlias.findMany({
+    where: { source: 'config' },
+    select: { id: true, kind: true, key: true },
+  });
+  const staleIds = configAliases
+    .filter(({ kind, key }) => !desiredKeys.has(`${kind}\u0000${key}`))
+    .map(({ id }) => id);
+  if (staleIds.length > 0) {
+    await tx.entityAlias.deleteMany({ where: { id: { in: staleIds }, source: 'config' } });
+  }
+  return entityIds;
 }
 
 async function resolveProgramEntity(
@@ -110,7 +149,7 @@ async function upsertProgram(
   tx: Transaction,
   input: ProgramInput,
   now: Date,
-): Promise<void> {
+): Promise<{ entityId: string; scopes: number }> {
   const entityId = await resolveProgramEntity(tx, input.program, input.scopes);
   const saved = await tx.program.upsert({
     where: {
@@ -163,6 +202,7 @@ async function upsertProgram(
       },
     });
   }
+  return { entityId, scopes: input.scopes.length };
 }
 
 async function materializeCatalog(
@@ -170,21 +210,32 @@ async function materializeCatalog(
   aliases: ReturnType<typeof parseAliases>,
   programs: readonly ProgramInput[],
   now: Date,
-): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    await syncConfigAliases(tx, aliases);
-    for (const program of programs) await upsertProgram(tx, program, now);
+): Promise<{ programs: number; scopes: number; entityIds: Set<string> }> {
+  return prisma.$transaction(async (tx) => {
+    const entityIds = await syncConfigAliases(tx, aliases);
+    let scopes = 0;
+    for (const program of programs) {
+      const saved = await upsertProgram(tx, program, now);
+      entityIds.add(saved.entityId);
+      scopes += saved.scopes;
+    }
+    return { programs: programs.length, scopes, entityIds };
   });
 }
 
-async function materializeAudits(prisma: PrismaClient, now: Date): Promise<void> {
+async function materializeAudits(
+  prisma: PrismaClient,
+  now: Date,
+): Promise<{ reports: number; candidates: number; entityIds: Set<string> }> {
   const rows = await prisma.observation.findMany({
     where: { collectorId: 'audit-report-repos' },
     select: { id: true, sourceUrl: true, fetchedAt: true, payload: true },
   });
   const records = toAuditReportRecords(rows);
 
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
+    const entityIds = new Set<string>();
+    const candidateKeys = new Set<string>();
     const programEntities = await tx.entity.findMany({
       where: { programs: { some: {} } },
       select: { id: true, canonicalName: true },
@@ -199,6 +250,7 @@ async function materializeAudits(prisma: PrismaClient, now: Date): Promise<void>
       let entityId: string;
       if (exactAlias) {
         entityId = exactAlias.entityId;
+        entityIds.add(entityId);
       } else {
         const seed = auditEntitySeed(record.report.projectHint);
         const provisional = await tx.entity.upsert({
@@ -207,11 +259,13 @@ async function materializeAudits(prisma: PrismaClient, now: Date): Promise<void>
           update: { canonicalName: seed.canonicalName },
         });
         entityId = provisional.id;
+        entityIds.add(entityId);
 
         for (const programEntity of programEntities) {
           if (programEntity.id === provisional.id) continue;
           const candidate = scoreCandidate(record.report.projectHint, programEntity.canonicalName);
           if (candidate.similarity < CANDIDATE_THRESHOLD) continue;
+          candidateKeys.add(`${provisional.id}\u0000${programEntity.id}`);
           await tx.mergeCandidate.upsert({
             where: {
               leftEntityId_rightEntityId: {
@@ -237,9 +291,10 @@ async function materializeAudits(prisma: PrismaClient, now: Date): Promise<void>
       await tx.auditReport.upsert({
         where: { reportUrl: record.report.reportUrl },
         create: { ...record.report, entityId },
-        update: { ...record.report, entityId },
+        update: exactAlias ? { ...record.report, entityId } : record.report,
       });
     }
+    return { reports: records.length, candidates: candidateKeys.size, entityIds };
   });
 }
 
@@ -249,16 +304,7 @@ export async function materializeCatalogFoundation(
   now: Date,
 ): Promise<FoundationResult> {
   const aliases = parseAliases(aliasesYaml);
-  const contestRows = await prisma.observation.findMany({
-    where: { collectorId: { in: CONTEST_COLLECTORS } },
-    select: { sourceUrl: true, fetchedAt: true, payload: true },
-  });
-  const contestPrograms = toProgramRecords(latestBySourceUrl(contestRows)).map(
-    (record): ProgramInput => ({
-      program: record.program,
-      scopes: [{ ...record.scope, addedAt: record.changedAt }],
-    }),
-  );
+  const contest = await loadContestPrograms(prisma);
   const immunefiRows = await prisma.observation.findMany({
     where: { collectorId: 'immunefi-programs' },
     select: { sourceUrl: true, fetchedAt: true, payload: true },
@@ -270,15 +316,19 @@ export async function materializeCatalogFoundation(
     }),
   );
 
-  await materializeCatalog(prisma, aliases, [...contestPrograms, ...immunefiPrograms], now);
-  await materializeAudits(prisma, now);
-
-  const [programs, scopes, entities, reports, candidates] = await Promise.all([
-    prisma.program.count(),
-    prisma.scope.count(),
-    prisma.entity.count(),
-    prisma.auditReport.count(),
-    prisma.mergeCandidate.count(),
-  ]);
-  return { programs, scopes, entities, reports, candidates };
+  const catalog = await materializeCatalog(
+    prisma,
+    aliases,
+    [...contest.programs, ...immunefiPrograms],
+    now,
+  );
+  const audits = await materializeAudits(prisma, now);
+  const entityIds = new Set([...catalog.entityIds, ...audits.entityIds]);
+  return {
+    programs: catalog.programs,
+    scopes: catalog.scopes,
+    entities: entityIds.size,
+    reports: audits.reports,
+    candidates: audits.candidates,
+  };
 }

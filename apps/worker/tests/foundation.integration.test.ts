@@ -1,9 +1,16 @@
 import { PrismaClient } from '@kritt-radar/db';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { materializeCatalogFoundation } from '../src/foundation.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  countDroppedContestPrograms,
+  materializeCatalogFoundation,
+} from '../src/foundation.js';
+import { withSafeIntegrationDatabase } from './integration-database.js';
 
 const prisma = new PrismaClient();
 const now = new Date('2026-08-03T12:00:00.000Z');
+const expectedDatabaseName =
+  process.env.KRITT_RADAR_INTEGRATION_DATABASE ?? 'kritt_radar_integration';
+let safeDatabaseValidated = false;
 
 const aliasesYaml = `
 repo-github-com-uniswap-v4-core:
@@ -12,22 +19,61 @@ repo-github-com-uniswap-v4-core:
     - auditHint: uniswap-v4
 `;
 
+const repoAndPlatformAliasesYaml = `
+repo-precedence-target:
+  canonicalName: Repo precedence target
+  match:
+    - repo: github.com/uniswap/v4-core
+platform-precedence-target:
+  canonicalName: Platform precedence target
+  match:
+    - platformName: { platform: code4rena, name: "Uniswap v4" }
+`;
+
+const platformAliasOnlyYaml = `
+platform-precedence-target:
+  canonicalName: Platform precedence target
+  match:
+    - platformName: { platform: code4rena, name: "Uniswap v4" }
+`;
+
+const collisionAliasYaml = `
+config-aave-target:
+  canonicalName: Config Aave target
+  match:
+    - repo: github.com/aave/v3
+`;
+
+async function currentDatabaseName(): Promise<string> {
+  const rows = await prisma.$queryRaw<Array<{ name: string }>>`SELECT current_database() AS name`;
+  return rows[0]?.name ?? '';
+}
+
 async function cleanDatabase(): Promise<void> {
-  await prisma.$transaction([
-    prisma.mergeCandidate.deleteMany(),
-    prisma.entityAlias.deleteMany(),
-    prisma.auditReport.deleteMany(),
-    prisma.score.deleteMany(),
-    prisma.signal.deleteMany(),
-    prisma.scope.deleteMany(),
-    prisma.program.deleteMany(),
-    prisma.entity.deleteMany(),
-    prisma.collectorRun.deleteMany(),
-    prisma.observation.deleteMany(),
-  ]);
+  await withSafeIntegrationDatabase(
+    await currentDatabaseName(),
+    expectedDatabaseName,
+    async () => {
+      await prisma.$transaction([
+        prisma.mergeCandidate.deleteMany(),
+        prisma.entityAlias.deleteMany(),
+        prisma.auditReport.deleteMany(),
+        prisma.score.deleteMany(),
+        prisma.signal.deleteMany(),
+        prisma.scope.deleteMany(),
+        prisma.program.deleteMany(),
+        prisma.entity.deleteMany(),
+        prisma.collectorRun.deleteMany(),
+        prisma.observation.deleteMany(),
+      ]);
+    },
+  );
 }
 
 async function seedObservations(): Promise<void> {
+  await prisma.entity.create({
+    data: { slug: 'unrelated-existing-entity', canonicalName: 'Unrelated existing entity' },
+  });
   await prisma.observation.createMany({
     data: [
       {
@@ -67,6 +113,24 @@ async function seedObservations(): Promise<void> {
         },
       },
       {
+        collectorId: 'c4-contests',
+        sourceUrl: 'https://code4rena.com/audits/no-repository',
+        fetchedAt: now,
+        contentHash: 'program-without-repository',
+        payload: {
+          platform: 'code4rena',
+          externalId: 'no-repository',
+          title: 'No repository',
+          url: 'https://code4rena.com/audits/no-repository',
+          poolUsd: 10_000,
+          kind: 'contest',
+          publishedAt: '2026-07-03T00:00:00.000Z',
+          startsAt: '2026-07-03T00:00:00.000Z',
+          endsAt: '2026-07-29T00:00:00.000Z',
+          repoUrl: null,
+        },
+      },
+      {
         collectorId: 'audit-report-repos',
         sourceUrl: 'https://api.github.com/repos/auditor/reports/git/trees/HEAD',
         fetchedAt: now,
@@ -103,28 +167,32 @@ async function foundationCounts(): Promise<Record<string, number>> {
 }
 
 beforeAll(async () => {
-  const rows = await prisma.$queryRaw<Array<{ name: string }>>`SELECT current_database() AS name`;
-  if (!/(?:integration|test)/i.test(rows[0]?.name ?? '')) {
-    throw new Error('foundation integration tests require a dedicated integration/test database');
-  }
+  await withSafeIntegrationDatabase(await currentDatabaseName(), expectedDatabaseName, async () => {});
+  safeDatabaseValidated = true;
+});
+
+beforeEach(async () => {
   await cleanDatabase();
   await seedObservations();
 });
 
 afterAll(async () => {
-  await cleanDatabase();
-  await prisma.$disconnect();
+  try {
+    if (safeDatabaseValidated) await cleanDatabase();
+  } finally {
+    await prisma.$disconnect();
+  }
 });
 
 describe('materializeCatalogFoundation', () => {
-  it('materializes exact aliases and reviewable fuzzy candidates idempotently', async () => {
-    await materializeCatalogFoundation(prisma, aliasesYaml, now);
+  it('returns per-invocation counts and deterministically materializes exact and fallback entities', async () => {
+    const result = await materializeCatalogFoundation(prisma, aliasesYaml, now);
 
+    expect(result).toEqual({ programs: 2, scopes: 2, entities: 3, reports: 2, candidates: 1 });
+    expect(await countDroppedContestPrograms(prisma)).toBe(1);
+    expect(await prisma.entity.count()).toBe(4);
     expect(await prisma.entityAlias.count()).toBe(1);
-    expect(await prisma.program.count()).toBe(2);
     expect(await prisma.program.count({ where: { entityId: null } })).toBe(0);
-    expect(await prisma.auditReport.count()).toBe(2);
-    expect(await prisma.mergeCandidate.count({ where: { status: 'pending' } })).toBe(1);
 
     const uniswapProgram = await prisma.program.findUniqueOrThrow({
       where: { platform_externalId: { platform: 'code4rena', externalId: 'uniswap-v4' } },
@@ -136,33 +204,113 @@ describe('materializeCatalogFoundation', () => {
 
     const aaveProgram = await prisma.program.findUniqueOrThrow({
       where: { platform_externalId: { platform: 'code4rena', externalId: 'aave-v3' } },
+      include: { entity: true },
+    });
+    expect(aaveProgram.entity).toMatchObject({
+      slug: 'repo-github-com-aave-v3',
+      canonicalName: 'aave/v3',
+    });
+
+    const firstCounts = await foundationCounts();
+    expect(await materializeCatalogFoundation(prisma, aliasesYaml, now)).toEqual(result);
+    expect(await foundationCounts()).toEqual(firstCounts);
+  });
+
+  it('keeps a manually approved report link and candidate decision during fuzzy replay', async () => {
+    await materializeCatalogFoundation(prisma, aliasesYaml, now);
+    const aaveProgram = await prisma.program.findUniqueOrThrow({
+      where: { platform_externalId: { platform: 'code4rena', externalId: 'aave-v3' } },
     });
     const aaveReport = await prisma.auditReport.findUniqueOrThrow({
       where: { reportUrl: 'https://reports.example/aave-v3-review.pdf' },
     });
-    expect(aaveReport.entityId).not.toBe(aaveProgram.entityId);
+    const candidate = await prisma.mergeCandidate.findFirstOrThrow({
+      where: { leftEntityId: aaveReport.entityId, rightEntityId: aaveProgram.entityId! },
+    });
+    const decidedAt = new Date(now.getTime() + 1_000);
+    await prisma.$transaction([
+      prisma.auditReport.update({ where: { id: aaveReport.id }, data: { entityId: aaveProgram.entityId! } }),
+      prisma.mergeCandidate.update({
+        where: { id: candidate.id },
+        data: { status: 'approved', decidedAt },
+      }),
+    ]);
 
-    const firstCounts = await foundationCounts();
-    await materializeCatalogFoundation(prisma, aliasesYaml, now);
-    expect(await foundationCounts()).toEqual(firstCounts);
+    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 2_000));
 
+    expect((await prisma.auditReport.findUniqueOrThrow({ where: { id: aaveReport.id } })).entityId).toBe(
+      aaveProgram.entityId,
+    );
+    expect(await prisma.mergeCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
+      status: 'approved',
+      decidedAt,
+    });
+  });
+
+  it('uses repo aliases before platform aliases and removes stale config aliases', async () => {
+    await materializeCatalogFoundation(prisma, repoAndPlatformAliasesYaml, now);
+    const where = { platform_externalId: { platform: 'code4rena', externalId: 'uniswap-v4' } };
+    expect((await prisma.program.findUniqueOrThrow({ where, include: { entity: true } })).entity?.slug).toBe(
+      'repo-precedence-target',
+    );
+
+    await materializeCatalogFoundation(prisma, platformAliasOnlyYaml, now);
+
+    expect(await prisma.entityAlias.findUnique({
+      where: { kind_key: { kind: 'repo', key: 'github.com/uniswap/v4-core' } },
+    })).toBeNull();
+    expect((await prisma.program.findUniqueOrThrow({ where, include: { entity: true } })).entity?.slug).toBe(
+      'platform-precedence-target',
+    );
+  });
+
+  it('atomically preserves a manual alias collision and rejected candidate decision', async () => {
+    await materializeCatalogFoundation(prisma, collisionAliasYaml, now);
+    const alias = await prisma.entityAlias.findUniqueOrThrow({
+      where: { kind_key: { kind: 'repo', key: 'github.com/aave/v3' } },
+    });
+    const manualTarget = await prisma.entity.findUniqueOrThrow({
+      where: { slug: 'unrelated-existing-entity' },
+    });
     const candidate = await prisma.mergeCandidate.findFirstOrThrow();
+    const decidedAt = new Date(now.getTime() + 1_000);
     await prisma.mergeCandidate.update({
       where: { id: candidate.id },
-      data: { status: 'rejected', decidedAt: now },
+      data: { status: 'rejected', decidedAt },
     });
+
+    let replay: Promise<unknown> | undefined;
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "EntityAlias" WHERE "id" = ${alias.id} FOR UPDATE`;
+      replay = materializeCatalogFoundation(prisma, collisionAliasYaml, new Date(now.getTime() + 2_000));
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await tx.entityAlias.update({
+        where: { id: alias.id },
+        data: { entityId: manualTarget.id, source: 'manual' },
+      });
+    });
+    await replay;
+
+    expect(await prisma.entityAlias.findUniqueOrThrow({ where: { id: alias.id } })).toMatchObject({
+      entityId: manualTarget.id,
+      source: 'manual',
+    });
+    expect(await prisma.mergeCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
+      status: 'rejected',
+      decidedAt,
+    });
+
+    await materializeCatalogFoundation(prisma, '', new Date(now.getTime() + 3_000));
+    expect(await prisma.entityAlias.findUniqueOrThrow({ where: { id: alias.id } })).toMatchObject({
+      entityId: manualTarget.id,
+      source: 'manual',
+    });
+  });
+
+  it('preserves existing scope signals during replay', async () => {
     await materializeCatalogFoundation(prisma, aliasesYaml, now);
-    expect((await prisma.mergeCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).status).toBe(
-      'rejected',
-    );
-    const aaveScope = await prisma.scope.findFirstOrThrow({ where: { programId: aaveProgram.id } });
-    await prisma.entityAlias.create({
-      data: {
-        entityId: aaveProgram.entityId!,
-        kind: 'platform_name',
-        key: 'manual:aave-v3',
-        source: 'manual',
-      },
+    const aaveScope = await prisma.scope.findFirstOrThrow({
+      where: { program: { platform: 'code4rena', externalId: 'aave-v3' } },
     });
     await prisma.signal.create({
       data: {
@@ -177,7 +325,6 @@ describe('materializeCatalogFoundation', () => {
 
     await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 1_000));
 
-    expect(await prisma.entityAlias.count({ where: { source: 'manual' } })).toBe(1);
     expect(await prisma.signal.count({ where: { scopeId: aaveScope.id, type: 'audit_gap' } })).toBe(1);
   });
 });
