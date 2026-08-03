@@ -70,13 +70,13 @@ describe('snapshotToAuditGap', () => {
   it('marks a failed snapshot as no data without interpreting zeroes as evidence', () => {
     const failed: RepoSnapshotPayload = {
       ...completeAudited,
-      headSha: null,
-      headAuthoredAt: null,
+      headSha: 'partial-head',
       files: [],
       totalLoc: 0,
       changedFiles: [],
       commits: [],
       complete: false,
+      truncated: true,
       error: 'GitHub returned 503',
     };
 
@@ -88,6 +88,72 @@ describe('snapshotToAuditGap', () => {
       error: 'GitHub returned 503',
       complete: false,
     });
+  });
+
+  it('accepts a collector failure before HEAD as a valid diagnostic snapshot', () => {
+    const failedBeforeHead: RepoSnapshotPayload = {
+      ...completeAudited,
+      headSha: null,
+      headAuthoredAt: null,
+      files: [],
+      totalLoc: 0,
+      changedFiles: [],
+      commits: [],
+      complete: false,
+      truncated: false,
+      error: 'HEAD request failed',
+    };
+
+    const signal = snapshotToAuditGap(failedBeforeHead, target);
+
+    expect(signal.confidence).toBe(0);
+    expect(signal.evidence.reason).toBe('snapshot_failed');
+  });
+
+  it.each([
+    {
+      name: 'empty HEAD SHA',
+      snapshot: { ...completeAudited, headSha: '' },
+      expected: target,
+    },
+    {
+      name: 'empty commit SHA',
+      snapshot: { ...completeAudited, commits: [''] },
+      expected: target,
+    },
+    {
+      name: 'complete snapshot without HEAD',
+      snapshot: { ...completeAudited, headSha: null },
+      expected: target,
+    },
+    {
+      name: 'simultaneously complete and truncated snapshot',
+      snapshot: { ...completeAudited, truncated: true },
+      expected: target,
+    },
+    {
+      name: 'error state marked complete',
+      snapshot: { ...completeAudited, error: 'compare failed' },
+      expected: target,
+    },
+    {
+      name: 'healthy state that is neither complete nor truncated',
+      snapshot: { ...completeAudited, complete: false },
+      expected: target,
+    },
+    {
+      name: 'healthy audited state without a base commit',
+      snapshot: {
+        ...completeAudited,
+        cutoff: { lastAuditAt: target.lastAuditAt, baseCommit: null },
+      },
+      expected: { ...target, coveredCommit: null },
+    },
+  ])('rejects an impossible $name', ({ snapshot, expected }) => {
+    const signal = snapshotToAuditGap(snapshot, expected);
+
+    expect(signal.confidence).toBe(0);
+    expect(signal.evidence.reason).toBe('invalid_snapshot');
   });
 
   it('caps truncated estimated data confidence at 0.35', () => {

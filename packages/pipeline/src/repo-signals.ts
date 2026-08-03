@@ -6,25 +6,67 @@ import { extractAuditGap } from './extractors/audit-gap.js';
 
 const ESTIMATED_LOC_CONFIDENCE = 0.7;
 const TRUNCATED_CONFIDENCE_CAP = 0.35;
+const NonEmptyString = z.string().min(1);
 
 const RepoSnapshotSchema = z.object({
-  repoKey: z.string(),
+  repoKey: NonEmptyString,
   cutoff: z.object({
-    lastAuditAt: z.string().nullable(),
-    baseCommit: z.string().nullable(),
+    lastAuditAt: z.string().datetime({ offset: true }).nullable(),
+    baseCommit: NonEmptyString.nullable(),
   }),
-  headSha: z.string().nullable(),
-  headAuthoredAt: z.string().nullable(),
-  files: z.array(z.string()),
-  totalLoc: z.number().finite().nonnegative(),
+  headSha: NonEmptyString.nullable(),
+  headAuthoredAt: z.string().datetime({ offset: true }).nullable(),
+  files: z.array(NonEmptyString),
+  totalLoc: z.number().finite().int().nonnegative(),
   locMethod: z.literal('estimated_from_bytes'),
   changedFiles: z.array(
-    z.object({ path: z.string(), changedLoc: z.number().finite().nonnegative() }),
+    z.object({ path: NonEmptyString, changedLoc: z.number().finite().int().nonnegative() }),
   ),
-  commits: z.array(z.string()),
+  commits: z.array(NonEmptyString),
   complete: z.boolean(),
   truncated: z.boolean(),
   error: z.string().nullable(),
+}).superRefine((snapshot, ctx) => {
+  if (snapshot.complete && snapshot.truncated) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['complete'],
+      message: 'complete and truncated cannot both be true',
+    });
+  }
+
+  if (snapshot.error !== null) {
+    if (snapshot.complete) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['complete'],
+        message: 'failed snapshots cannot be complete',
+      });
+    }
+    return;
+  }
+
+  if (snapshot.headSha === null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['headSha'],
+      message: 'healthy snapshots require a HEAD SHA',
+    });
+  }
+  if (!snapshot.complete && !snapshot.truncated) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['complete'],
+      message: 'healthy snapshots must be complete or truncated',
+    });
+  }
+  if (snapshot.cutoff.lastAuditAt !== null && snapshot.cutoff.baseCommit === null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['cutoff', 'baseCommit'],
+      message: 'healthy audited snapshots require a base commit',
+    });
+  }
 });
 
 export interface RepoTargetRecord extends RepoTarget {
@@ -75,6 +117,10 @@ export function snapshotToAuditGap(
   snapshot: RepoSnapshotPayload,
   expected: RepoTarget,
 ): SignalValue {
+  if (!RepoSnapshotSchema.safeParse(snapshot).success) {
+    return noDataSignal(expected, 'invalid_snapshot');
+  }
+
   if (!cutoffMatches(snapshot, expected)) {
     return {
       type: 'audit_gap',
@@ -188,6 +234,16 @@ function snapshotSourceUrl(repoKey: string): string {
   return `https://api.github.com/repos/${encodeURIComponent(owner!)}/${encodeURIComponent(repository!)}`;
 }
 
+function isUsableSnapshot(
+  snapshot: RepoSnapshotPayload,
+): snapshot is RepoSnapshotPayload & { error: null; headSha: string } {
+  return (
+    snapshot.error === null &&
+    snapshot.headSha !== null &&
+    (snapshot.complete || snapshot.truncated)
+  );
+}
+
 function noDataSignal(target: RepoTarget, reason: string, error?: string): SignalValue {
   return {
     type: 'audit_gap',
@@ -255,7 +311,7 @@ export async function materializeRepoSignals(
     ];
 
     await prisma.$transaction(async (tx) => {
-      if (snapshot?.headSha !== null && snapshot?.headSha !== undefined) {
+      if (snapshot && isUsableSnapshot(snapshot)) {
         await tx.scope.update({ where: { id: target.scopeId }, data: { commitish: snapshot.headSha } });
       }
       await tx.signal.upsert({

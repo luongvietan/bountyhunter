@@ -428,8 +428,8 @@ describe('materializeRepoSignals', () => {
       locMethod: 'estimated_from_bytes',
       changedFiles: [{ path: 'src/Pool.sol', changedLoc: 42 }],
       commits: ['change001'],
-      complete: true,
-      truncated: false,
+      complete: false,
+      truncated: true,
       error: null,
     };
     await prisma.observation.createMany({
@@ -459,8 +459,8 @@ describe('materializeRepoSignals', () => {
           payload: {
             repoKey: 'github.com/aave/v3',
             cutoff: { lastAuditAt: '2026-06-02T00:00:00.000Z', baseCommit: 'aave-base' },
-            headSha: null,
-            headAuthoredAt: null,
+            headSha: 'failed-new-head',
+            headAuthoredAt: '2026-08-01T00:00:00.000Z',
             files: [],
             totalLoc: 0,
             locMethod: 'estimated_from_bytes',
@@ -488,6 +488,7 @@ describe('materializeRepoSignals', () => {
     expect(savedUniswapScope.commitish).toBe('abc123');
     expect(savedAaveScope.commitish).toBe('previous-good-head');
     expect(uniswapSignal.observationIds).toEqual(['audit-tie-a', 'snapshot-z']);
+    expect(uniswapSignal.confidence).toBe(0.35);
     expect(uniswapSignal.evidence).toMatchObject({ headSha: 'abc123', sinceCommit: 'base-a' });
     expect(aaveSignal.confidence).toBe(0);
     expect(aaveSignal.evidence).toMatchObject({ reason: 'snapshot_failed' });
@@ -511,9 +512,14 @@ describe('materializeRepoSignals', () => {
 
   it('uses the latest exact source observation and refuses a stale cutoff fallback', async () => {
     await materializeCatalogFoundation(prisma, aliasesYaml, now);
-    const uniswapScope = await prisma.scope.findFirstOrThrow({
-      where: { program: { platform: 'code4rena', externalId: 'uniswap-v4' } },
-    });
+    const [uniswapScope, aaveScope] = await Promise.all([
+      prisma.scope.findFirstOrThrow({
+        where: { program: { platform: 'code4rena', externalId: 'uniswap-v4' } },
+      }),
+      prisma.scope.findFirstOrThrow({
+        where: { program: { platform: 'code4rena', externalId: 'aave-v3' } },
+      }),
+    ]);
     const report = await prisma.auditReport.findUniqueOrThrow({
       where: { reportUrl: 'https://reports.example/uniswap-v4.pdf' },
     });
@@ -563,10 +569,31 @@ describe('materializeRepoSignals', () => {
           contentHash: 'snapshot-foreign-source',
           payload,
         },
+        {
+          id: 'snapshot-invalid-aave',
+          collectorId: 'github-repo-snapshot',
+          sourceUrl: 'https://api.github.com/repos/aave/v3',
+          fetchedAt: now,
+          contentHash: 'snapshot-invalid-aave',
+          payload: {
+            repoKey: 'github.com/aave/v3',
+            cutoff: { lastAuditAt: null, baseCommit: null },
+            headSha: null,
+            headAuthoredAt: null,
+            files: [],
+            totalLoc: 0,
+            locMethod: 'estimated_from_bytes',
+            changedFiles: [],
+            commits: [],
+            complete: true,
+            truncated: false,
+            error: null,
+          },
+        },
       ],
     });
 
-    await materializeRepoSignals(prisma, now);
+    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 2 });
 
     const signal = await prisma.signal.findUniqueOrThrow({
       where: { scopeId_type: { scopeId: uniswapScope.id, type: 'audit_gap' } },
@@ -576,5 +603,12 @@ describe('materializeRepoSignals', () => {
     expect(signal.observationIds).toContain('snapshot-stale-newer');
     expect(signal.observationIds).not.toContain('snapshot-current-older');
     expect(signal.observationIds).not.toContain('snapshot-foreign-source');
+
+    const invalidSignal = await prisma.signal.findUniqueOrThrow({
+      where: { scopeId_type: { scopeId: aaveScope.id, type: 'audit_gap' } },
+    });
+    expect(invalidSignal.confidence).toBe(0);
+    expect(invalidSignal.evidence).toMatchObject({ reason: 'invalid_snapshot' });
+    expect(invalidSignal.observationIds).toContain('snapshot-invalid-aave');
   });
 });
