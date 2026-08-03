@@ -24,6 +24,8 @@ type DecisionInput = {
 
 const MAX_SERIALIZATION_RETRIES = 2;
 
+class AliasCreateConflictError extends Error {}
+
 export function normalizeAuditHintKey(projectHint: string): string {
   return projectHint.trim().toLowerCase();
 }
@@ -37,6 +39,10 @@ function failure(
 
 function isSerializationConflict(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+}
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
 async function approveCandidate(
@@ -113,9 +119,14 @@ async function approveCandidate(
         data: { source: 'manual' },
       });
     } else {
-      await tx.entityAlias.create({
-        data: { entityId: canonical.id, kind: 'audit_hint', key, source: 'manual' },
-      });
+      try {
+        await tx.entityAlias.create({
+          data: { entityId: canonical.id, kind: 'audit_hint', key, source: 'manual' },
+        });
+      } catch (error) {
+        if (isUniqueConstraintViolation(error)) throw new AliasCreateConflictError();
+        throw error;
+      }
     }
   }
 
@@ -209,6 +220,9 @@ export async function decideMergeCandidate(
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
+      if (error instanceof AliasCreateConflictError) {
+        return failure('conflict', 'An audit hint alias belongs to another entity.');
+      }
       if (!isSerializationConflict(error) || retries >= MAX_SERIALIZATION_RETRIES) throw error;
     }
   }

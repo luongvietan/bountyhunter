@@ -1,4 +1,4 @@
-import { PrismaClient } from '@kritt-radar/db';
+import { Prisma, PrismaClient } from '@kritt-radar/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   decideMergeCandidate,
@@ -7,6 +7,7 @@ import {
 import { withSafeIntegrationDatabase } from '../../worker/tests/integration-database.js';
 
 const prisma = new PrismaClient();
+const competingPrisma = new PrismaClient();
 const expectedDatabaseName =
   process.env.KRITT_RADAR_INTEGRATION_DATABASE ?? 'kritt_radar_integration';
 let safeDatabaseValidated = false;
@@ -27,6 +28,23 @@ async function removeReportRelinkFailureTrigger(): Promise<void> {
   );
   await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_force_serialization_failure()');
   await prisma.$executeRawUnsafe('DROP SEQUENCE IF EXISTS test_serialization_attempts');
+  await prisma.$executeRawUnsafe(
+    'DROP TRIGGER IF EXISTS "test_pause_alias_race" ON "MergeCandidate"',
+  );
+  await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_pause_alias_race()');
+  await prisma.$executeRawUnsafe('DROP SEQUENCE IF EXISTS test_alias_race_preflight');
+}
+
+async function waitForAliasRacePreflight(tx: Prisma.TransactionClient): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const [state] = await tx.$queryRaw<Array<{ reached: boolean }>>`
+      SELECT is_called AS reached FROM test_alias_race_preflight
+    `;
+    if (state?.reached) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('decision did not reach the alias-race barrier');
 }
 
 async function cleanDatabase(): Promise<void> {
@@ -152,7 +170,7 @@ afterAll(async () => {
   try {
     if (safeDatabaseValidated) await cleanDatabase();
   } finally {
-    await prisma.$disconnect();
+    await Promise.all([prisma.$disconnect(), competingPrisma.$disconnect()]);
   }
 });
 
@@ -324,6 +342,82 @@ describe('decideMergeCandidate approval', () => {
         where: { kind_key: { kind: 'audit_hint', key: 'aave-v3-review' } },
       }),
     ).toBeNull();
+  });
+
+  it('returns conflict when another transaction inserts the alias after preflight', async () => {
+    const { candidate, provisional, canonical, siblingCanonical } =
+      await createApprovalFixture();
+    const candidatesBefore = await prisma.mergeCandidate.findMany({ orderBy: { id: 'asc' } });
+    const reportsBefore = await prisma.auditReport.findMany({ orderBy: { id: 'asc' } });
+
+    await prisma.$executeRawUnsafe('CREATE SEQUENCE test_alias_race_preflight START 1');
+    await prisma.$executeRawUnsafe(`
+      CREATE FUNCTION test_pause_alias_race() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.id = 'selected-candidate' AND NEW.status = 'approved' THEN
+          PERFORM nextval('test_alias_race_preflight');
+          PERFORM pg_advisory_xact_lock(8042026);
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER "test_pause_alias_race"
+      BEFORE UPDATE OF status ON "MergeCandidate"
+      FOR EACH ROW EXECUTE FUNCTION test_pause_alias_race()
+    `);
+
+    let signalCompetingLock!: () => void;
+    const competingLock = new Promise<void>((resolve) => {
+      signalCompetingLock = resolve;
+    });
+    const competingInsert = competingPrisma.$transaction(async (tx) => {
+      const [lock] = await tx.$queryRaw<Array<{ locked: boolean }>>`
+        SELECT pg_try_advisory_xact_lock(8042026) AS locked
+      `;
+      if (!lock?.locked) throw new Error('failed to acquire alias-race advisory lock');
+      signalCompetingLock();
+      await waitForAliasRacePreflight(tx);
+      return tx.entityAlias.create({
+        data: {
+          id: 'competing-alias',
+          entityId: siblingCanonical.id,
+          kind: 'audit_hint',
+          key: 'aave-v3-review',
+          source: 'config',
+        },
+      });
+    });
+
+    await competingLock;
+    const decision = decideMergeCandidate(prisma, {
+      candidateId: candidate.id,
+      action: 'approve',
+      now: new Date('2026-08-04T12:00:00.000Z'),
+    }).then(
+      (result) => ({ result, error: null }),
+      (error: unknown) => ({ result: null, error }),
+    );
+
+    try {
+      const competingAlias = await competingInsert;
+      const outcome = await decision;
+
+      expect(outcome.error).toBeNull();
+      expect(outcome.result).toMatchObject({ ok: false, code: 'conflict' });
+      expect(await prisma.mergeCandidate.findMany({ orderBy: { id: 'asc' } })).toEqual(
+        candidatesBefore,
+      );
+      expect(await prisma.auditReport.findMany({ orderBy: { id: 'asc' } })).toEqual(
+        reportsBefore,
+      );
+      expect(await prisma.auditReport.count({ where: { entityId: provisional.id } })).toBe(2);
+      expect(await prisma.auditReport.count({ where: { entityId: canonical.id } })).toBe(0);
+      expect(await prisma.entityAlias.findMany()).toEqual([competingAlias]);
+    } finally {
+      await removeReportRelinkFailureTrigger();
+    }
   });
 
   it('permits an existing same-target alias and records the manual decision source', async () => {
