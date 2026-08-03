@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-04T00:58:56.1468554+07:00",
+  "title": "Design System: Kritt Radar",
+  "extensions": {
+    "colorMeta": {
+      "instrument-teal": {
+        "role": "primary",
+        "displayName": "Instrument Teal",
+        "canonical": "oklch(0.47 0.105 188)",
+        "tonalRamp": ["oklch(0.15 0.04 188)", "oklch(0.25 0.06 188)", "oklch(0.35 0.08 188)", "oklch(0.47 0.105 188)", "oklch(0.58 0.10 188)", "oklch(0.70 0.08 188)", "oklch(0.84 0.05 188)", "oklch(0.95 0.02 188)"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.28 0 0)", "oklch(0.42 0 0)", "oklch(0.56 0 0)", "oklch(0.70 0 0)", "oklch(0.82 0 0)", "oklch(0.92 0 0)", "oklch(1 0 0)"]
+      },
+      "evidence-ink": {
+        "role": "neutral",
+        "displayName": "Evidence Ink",
+        "canonical": "oklch(0.20 0.018 200)",
+        "tonalRamp": ["oklch(0.12 0.012 200)", "oklch(0.20 0.018 200)", "oklch(0.30 0.02 200)", "oklch(0.42 0.02 200)", "oklch(0.56 0.018 200)", "oklch(0.70 0.014 200)", "oklch(0.84 0.01 200)", "oklch(0.95 0.004 200)"]
+      }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Route title", "purpose": "One route heading per screen." },
+      "body": { "displayName": "Interface body", "purpose": "Evidence descriptions and consequences." },
+      "data": { "displayName": "Provenance data", "purpose": "Scores, IDs, repository keys, and timestamps." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "state", "value": "180ms cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Hover, focus, and disclosure state only." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "760px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Confirmed approval after evidence review.",
+      "html": "<button class=\"ds-btn-primary\">Approve match</button>",
+      "css": ".ds-btn-primary { min-height: 44px; border: 0; border-radius: 8px; padding: 12px 16px; background: oklch(0.47 0.105 188); color: oklch(1 0 0); font: 650 0.875rem/1 ui-sans-serif, system-ui, sans-serif; transition: background 180ms cubic-bezier(0.25,1,0.5,1); } .ds-btn-primary:hover { background: oklch(0.39 0.095 188); } .ds-btn-primary:focus-visible { outline: 2px solid oklch(0.47 0.105 188); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Reject, reopen, and lower-emphasis actions.",
+      "html": "<button class=\"ds-btn-secondary\">Reject match</button>",
+      "css": ".ds-btn-secondary { min-height: 44px; border: 1px solid oklch(0.86 0.010 200); border-radius: 8px; padding: 12px 16px; background: oklch(1 0 0); color: oklch(0.20 0.018 200); font: 650 0.875rem/1 ui-sans-serif, system-ui, sans-serif; } .ds-btn-secondary:hover { background: oklch(0.965 0.006 190); } .ds-btn-secondary:focus-visible { outline: 2px solid oklch(0.47 0.105 188); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "status-pending",
+      "description": "Explicit written state with semantic color.",
+      "html": "<span class=\"ds-status-pending\">Pending</span>",
+      "css": ".ds-status-pending { display: inline-flex; border-radius: 4px; padding: 4px 8px; background: oklch(0.63 0.14 65); color: oklch(1 0 0); font: 650 0.8125rem/1.3 ui-sans-serif, system-ui, sans-serif; }"
+    },
+    {
+      "name": "Repository Chip",
+      "kind": "chip",
+      "description": "Hard repository identity in evidence lists.",
+      "html": "<span class=\"ds-repo-chip\">github.com/aave/aave-v3-origin</span>",
+      "css": ".ds-repo-chip { display: inline-flex; max-width: 100%; overflow-wrap: anywhere; border-radius: 4px; padding: 4px 8px; background: oklch(0.965 0.006 190); color: oklch(0.20 0.018 200); font: 520 0.8125rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }"
+    },
+    {
+      "name": "Status Navigation",
+      "kind": "nav",
+      "description": "URL-backed queue status filters.",
+      "html": "<nav class=\"ds-tabs\"><a class=\"ds-tab ds-tab-active\" href=\"?status=pending\">Pending <span>2</span></a><a class=\"ds-tab\" href=\"?status=approved\">Approved <span>0</span></a></nav>",
+      "css": ".ds-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid oklch(0.86 0.010 200); } .ds-tab { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; color: oklch(0.46 0.025 200); text-decoration: none; font: 650 0.875rem/1 ui-sans-serif, system-ui, sans-serif; } .ds-tab-active { color: oklch(0.20 0.018 200); box-shadow: inset 0 -2px 0 oklch(0.47 0.105 188); } .ds-tab:focus-visible { outline: 2px solid oklch(0.47 0.105 188); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Evidence Bench",
+    "overview": "A well-lit review desk where source evidence, proposed relationships, and deliberate decisions each have a stable place. The surface is compact, familiar, and explicit.",
+    "keyCharacteristics": ["Flat ruled surfaces", "Dense evidence", "Restrained teal actions", "State-driven motion"],
+    "rules": [
+      { "name": "The Evidence Color Rule", "body": "Color communicates a current state or an available action, never atmosphere.", "section": "colors" },
+      { "name": "The One Scale Rule", "body": "Responsive behavior changes layout, not heading size.", "section": "typography" },
+      { "name": "The Flat Bench Rule", "body": "If a container needs a large shadow, its hierarchy or spacing is wrong.", "section": "elevation" }
+    ],
+    "dos": ["Do use pure white and cool neutral surfaces.", "Do label every semantic state in text.", "Do preserve native controls and visible focus."],
+    "donts": ["Don't use generic SaaS metric-card grids.", "Don't use crypto neon or terminal cosplay.", "Don't hide approval consequences behind vague labels."]
+  }
+}
