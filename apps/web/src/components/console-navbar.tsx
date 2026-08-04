@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-export type ConsoleSection = 'targets' | 'merge-queue';
+export type ConsoleSection = 'targets' | 'merge-queue' | 'outcomes';
 
 interface ConsoleNavbarProps {
   activeSection?: ConsoleSection;
@@ -25,6 +25,9 @@ export function ConsoleNavbar({ activeSection, trailing }: ConsoleNavbarProps) {
             aria-current={activeSection === 'merge-queue' ? 'page' : undefined}
           >
             Merge queue
+          </Link>
+          <Link href="/outcomes" aria-current={activeSection === 'outcomes' ? 'page' : undefined}>
+            Outcomes
           </Link>
         </nav>
         {trailing}

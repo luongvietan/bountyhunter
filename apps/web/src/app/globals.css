@@ -1533,3 +1533,244 @@ summary:focus-visible {
   font-size: var(--text-caption);
   cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------------
+   Outcomes
+   --------------------------------------------------------------------------- */
+
+.outcome-form {
+  padding: 20px;
+  margin: 20px 0 8px;
+  border-radius: var(--radius-xl);
+  background: var(--canvas);
+  box-shadow: var(--shadow-subtle);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field-wide {
+  grid-column: span 2;
+}
+
+.form-field span {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  font-weight: 550;
+}
+
+.form-field select,
+.form-field input {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: var(--text-body);
+}
+
+.form-field select:disabled,
+.form-field input:disabled {
+  background: var(--bench);
+  color: var(--ink-secondary);
+}
+
+.outcome-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: var(--radius-xl);
+  overflow: clip;
+  background: var(--canvas);
+  box-shadow: var(--shadow-subtle);
+}
+
+.outcome-table th,
+.outcome-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--text-caption);
+}
+
+.outcome-table thead th {
+  background: var(--bench);
+  color: var(--ink-secondary);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.outcome-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.outcome-platform {
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+}
+
+.outcome-notes {
+  max-width: 32ch;
+  overflow-wrap: anywhere;
+  color: var(--ink-secondary);
+}
+
+.result-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.result-accepted {
+  background: var(--approved-bg);
+  color: var(--approved-ink);
+}
+
+.result-duplicate {
+  border-style: dashed;
+  border-color: var(--ink-quiet);
+  background: var(--rejected-bg);
+  color: var(--rejected-ink);
+}
+
+.result-invalid {
+  border-color: var(--ember);
+  background: var(--ember-soft);
+  color: var(--danger-ink);
+}
+
+.result-pending {
+  border-color: var(--ember);
+  background: var(--pending-bg);
+  color: var(--pending-ink);
+}
+
+.correlation-panel {
+  margin-top: 32px;
+}
+
+.correlation-panel-head {
+  margin-bottom: 16px;
+}
+
+.correlation-panel-head h2 {
+  margin: 0 0 6px;
+  font-size: var(--text-subheading);
+  font-weight: 600;
+}
+
+.correlation-panel-head p {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.correlation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.correlation-card {
+  padding: 16px;
+  border-radius: var(--radius-xl);
+  background: var(--canvas);
+  box-shadow: var(--shadow-subtle);
+}
+
+.correlation-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.correlation-card h3 {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.correlation-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--ember);
+  border-radius: var(--radius-md);
+  background: var(--error-bg);
+  color: var(--danger-ink);
+  font-size: var(--text-caption);
+}
+
+.correlation-facts {
+  display: flex;
+  gap: 20px;
+  margin: 0 0 12px;
+}
+
+.correlation-facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.correlation-facts dt {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.correlation-facts dd {
+  margin: 0;
+  font-size: var(--text-body-lg);
+  font-weight: 600;
+}
+
+.tertile-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tertile-table th,
+.tertile-table td {
+  padding: 6px 4px;
+  text-align: left;
+  border-top: 1px solid var(--rule);
+  font-size: var(--text-caption);
+}
+
+.tertile-table thead th {
+  border-top: 0;
+  color: var(--ink-secondary);
+  font-weight: 550;
+}
+
+.tertile-table td:first-child {
+  text-transform: capitalize;
+}
+
+@media (max-width: 760px) {
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-field-wide {
+    grid-column: 1;
+  }
+}
