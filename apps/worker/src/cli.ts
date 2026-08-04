@@ -14,7 +14,12 @@ import {
   type CollectorRunResult,
 } from '@kritt-radar/collectors';
 import { prisma, saveObservations } from '@kritt-radar/db';
-import { materializeProtocolTvl, rankScopes, type ScopeSignals } from '@kritt-radar/pipeline';
+import {
+  materializeProtocolTvl,
+  materializeValueAtRisk,
+  rankScopes,
+  type ScopeSignals,
+} from '@kritt-radar/pipeline';
 import {
   countDroppedContestPrograms,
   listRepoTargets,
@@ -117,6 +122,8 @@ async function collectGithub(): Promise<CollectorRunResult> {
 async function materializeSignals(): Promise<void> {
   const result = await materializeRepoSignals(prisma, new Date());
   console.log(`[signals] audit_gap: ${result.scopes} scopes / ${result.noData} no data`);
+  const varCount = await materializeValueAtRisk(prisma);
+  console.log(`[signals] value_at_risk: ${varCount} scopes`);
 }
 
 async function rank(): Promise<void> {
