@@ -8,3 +8,4 @@ export * from './repo-signals.js';
 export * from './protocol-tvl.js';
 export * from './extractors/freshness.js';
 export * from './extractors/audit-gap.js';
+export * from './extractors/value-at-risk.js';
