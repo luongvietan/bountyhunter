@@ -10,6 +10,8 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = { title: 'Merge review queue' };
+
 interface MergeQueueRouteProps {
   searchParams: Promise<{ status?: string | string[] }>;
 }

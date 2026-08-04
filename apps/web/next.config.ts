@@ -11,7 +11,7 @@ const workspaceRoot = resolve(import.meta.dirname, '../..');
 loadWorkspaceEnv(resolve(workspaceRoot, '.env'));
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@kritt-radar/db', '@kritt-radar/pipeline'],
+  transpilePackages: ['@kritt-radar/core', '@kritt-radar/db', '@kritt-radar/pipeline'],
   turbopack: {
     root: workspaceRoot,
   },

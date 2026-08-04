@@ -23,6 +23,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@kritt-radar/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@kritt-radar/db':
         specifier: workspace:*
         version: link:../../packages/db

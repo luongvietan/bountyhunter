@@ -11,6 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@kritt-radar/core": "workspace:*",
     "@kritt-radar/db": "workspace:*",
     "@kritt-radar/pipeline": "workspace:*",
     "geist": "^1.7.2",
