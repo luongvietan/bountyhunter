@@ -26,6 +26,7 @@ import {
   type ScopeSignals,
 } from '@kritt-radar/pipeline';
 import { collectCandidates, dispatchScans, formatPlan } from './dispatch.js';
+import { formatIngest, ingestFindings } from './ingest.js';
 import {
   countDroppedContestPrograms,
   listRepoTargets,
@@ -185,6 +186,16 @@ async function dispatch(argv: readonly string[]): Promise<void> {
   console.log(formatPlan(result, config));
 }
 
+async function ingest(): Promise<void> {
+  const client = new KrittClient({ baseUrl: process.env.KRITT_API_URL ?? DEFAULT_KRITT_API_URL });
+  if (!(await client.health())) {
+    throw new Error(
+      `Open-Kritt is not reachable at ${process.env.KRITT_API_URL ?? DEFAULT_KRITT_API_URL}.`,
+    );
+  }
+  console.log(formatIngest(await ingestFindings(prisma, client)));
+}
+
 async function rank(): Promise<void> {
   const weights = parseWeights(await readFile(resolve(ROOT, 'config/weights.yml'), 'utf8'));
 
@@ -232,6 +243,7 @@ async function runCommand(command: string | undefined): Promise<void> {
   else if (command === 'materialize-signals') await materializeSignals();
   else if (command === 'sync') await sync(runtimeDependencies);
   else if (command === 'dispatch') await dispatch(process.argv.slice(3));
+  else if (command === 'ingest') await ingest();
   else if (command === 'rank') await rank();
   else {
     console.error(

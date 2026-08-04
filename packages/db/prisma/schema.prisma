@@ -202,8 +202,46 @@ model ScanDispatch {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   finishedAt DateTime?
+  findings   Finding[]
 
   @@unique([repoKey, commitSha])
   @@index([status, createdAt])
   @@index([scopeId])
+}
+
+/// A finding Open-Kritt produced, held for human review before submission.
+/// Kritt has already deduped and ranked these by expected bounty; the fields
+/// here mirror its verdict rather than recomputing one.
+model Finding {
+  id                String       @id @default(cuid())
+  dispatch          ScanDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  dispatchId        String
+  krittVulnId       String
+  rank              Int?
+  title             String
+  vulnerabilityType String?
+  filePath          String?
+  line              Int?
+  severity          String?
+  exploitable       Boolean?
+  explanation       String?
+  maliciousInput    String?
+  maliciousActor    String?
+  triggerFlow       String[]
+  bountyRank        Int?
+  impactLevel       String?
+  minRewardUsd      Decimal?     @db.Decimal(20, 2)
+  maxRewardUsd      Decimal?     @db.Decimal(20, 2)
+  rankReasoning     String?
+  clusterId         String?
+  raw               Json
+  /// new -> reviewed -> submitted, or dismissed. Nothing leaves this table
+  /// for a bounty platform without a person moving it.
+  status            String       @default("new")
+  decidedAt         DateTime?
+  fetchedAt         DateTime     @default(now())
+
+  @@unique([dispatchId, krittVulnId])
+  @@index([status, bountyRank])
+  @@index([dispatchId])
 }

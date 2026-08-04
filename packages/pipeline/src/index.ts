@@ -13,3 +13,4 @@ export * from './extractors/audit-gap.js';
 export * from './extractors/value-at-risk.js';
 export * from './kritt-client.js';
 export * from './dispatch-select.js';
+export * from './finding-parse.js';
