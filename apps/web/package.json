@@ -12,6 +12,7 @@
   "dependencies": {
     "@kritt-radar/db": "workspace:*",
     "@kritt-radar/pipeline": "workspace:*",
+    "geist": "^1.7.2",
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8",

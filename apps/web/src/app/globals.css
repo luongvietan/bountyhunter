@@ -1,23 +1,75 @@
 :root {
-  --canvas: oklch(1 0 0);
-  --bench: oklch(0.965 0.006 190);
-  --bench-strong: oklch(0.925 0.012 190);
-  --ink: oklch(0.2 0.018 200);
-  --ink-secondary: oklch(0.42 0.025 200);
-  --rule: oklch(0.86 0.01 200);
-  --teal: oklch(0.43 0.1 188);
-  --teal-deep: oklch(0.34 0.085 188);
-  --teal-soft: oklch(0.94 0.025 188);
-  --pending-bg: oklch(0.93 0.055 65);
-  --pending-ink: oklch(0.34 0.09 58);
-  --approved-bg: oklch(0.92 0.045 145);
-  --approved-ink: oklch(0.31 0.09 145);
-  --rejected-bg: oklch(0.94 0.035 28);
-  --rejected-ink: oklch(0.39 0.12 28);
-  --error-bg: oklch(0.965 0.02 28);
+  /* Surfaces: page sits behind, paper carries evidence. Two neutral layers so a
+     dense card reads as an object on a desk rather than a box drawn on white. */
+  --page: #f5f5f5;
+  --canvas: #ffffff;
+  --bench: #fafafa;
+  --bench-strong: #ebebeb;
+
+  /* Ink. --ink-secondary is #595959, not the supplied #737373: at 4.35:1 on the
+     page surface that grey misses WCAG AA for body text, and this console is
+     mostly small labels. #737373 survives as --ink-quiet for large text only. */
+  --ink: #0a0a0a;
+  --ink-soft: #171717;
+  --ink-secondary: #595959;
+  --ink-quiet: #737373;
+  --rule: #e5e5e5;
+
+  /* One accent. Ember marks what needs attention and where focus is, never a
+     confirmed state, and never the approve control: red on the one button that
+     writes durable data would read as danger rather than intent. */
+  --ember: #e7000b;
+  --ember-deep: #b8000a;
+  --ember-soft: #fdeceb;
+
+  /* Legacy accent slot kept so older rules resolve; both point at ink because
+     the decisive action here is neutral and heavy, not coloured. */
+  --teal: #0a0a0a;
+  --teal-deep: #000000;
+  --teal-soft: #f0f0f0;
+
+  /* Chip fills. Distinction carries in fill, border and label, never hue alone:
+     pending is the only state that earns the accent. These three pairs are for
+     chips only, where the ink always sits on its own fill. */
+  --pending-bg: var(--ember-soft);
+  --pending-ink: #a3000a;
+  --approved-bg: #0a0a0a;
+  --approved-ink: #ffffff;
+  --rejected-bg: #ffffff;
+  --rejected-ink: #737373;
+
+  /* Message and panel inks, which always sit on paper. Kept separate from the
+     chip pair: reusing --approved-ink here would paint white text on white. */
+  --settled-ink: #0a0a0a;
+  --danger-ink: #a3000a;
+  --panel-settled-bg: #fafafa;
+  --panel-settled-rule: #e5e5e5;
+  --error-bg: var(--ember-soft);
+
+  /* Type */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  --text-caption: 12px;
+  --text-body: 14px;
+  --text-body-lg: 16px;
+  --text-subheading: 18px;
+  --text-heading-sm: 24px;
+  --text-heading: 30px;
+
+  /* Radii. Cards stop at 14px; anything rounder stops reading as an instrument. */
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* One elevation, and it already carries its own 1px ring, so nothing using it
+     also draws a border. */
+  --shadow-subtle: oklab(0.145 -0.00000143796 0.00000340492 / 0.05) 0 0 0 1px,
+    rgba(0, 0, 0, 0.1) 0 1px 3px 0, rgba(0, 0, 0, 0.1) 0 1px 2px -1px;
+
   --transition-state: 180ms cubic-bezier(0.25, 1, 0.5, 1);
   color-scheme: light;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-synthesis: none;
 }
 
@@ -27,17 +79,18 @@
 
 html {
   min-width: 320px;
-  background: var(--canvas);
+  background: var(--page);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
-  background: var(--canvas);
+  background: var(--page);
   color: var(--ink);
-  font-size: 0.9375rem;
-  font-weight: 430;
-  line-height: 1.55;
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: 1.43;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -56,7 +109,7 @@ a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--ember);
   outline-offset: 3px;
 }
 
@@ -70,7 +123,7 @@ summary:focus-visible {
   border-radius: 8px;
   background: var(--ink);
   color: var(--canvas);
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
   transform: translateY(calc(-100% - 16px));
   transition: transform var(--transition-state);
@@ -109,7 +162,7 @@ summary:focus-visible {
 .product-name {
   margin-bottom: 1px;
   font-size: 1rem;
-  font-weight: 760;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
@@ -117,7 +170,7 @@ summary:focus-visible {
   margin-bottom: 0;
   color: var(--ink-secondary);
   font-size: 0.8125rem;
-  font-weight: 610;
+  font-weight: 500;
 }
 
 .status-summary {
@@ -143,15 +196,15 @@ summary:focus-visible {
 .status-summary dt {
   color: var(--ink-secondary);
   font-size: 0.8125rem;
-  font-weight: 650;
+  font-weight: 550;
 }
 
 .status-summary dd {
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 1rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .route-heading {
@@ -165,10 +218,10 @@ summary:focus-visible {
 .route-heading h1,
 .setup-panel h1 {
   margin: 0 0 8px;
-  font-size: 1.75rem;
-  font-weight: 720;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-size: var(--text-heading);
+  font-weight: 600;
+  letter-spacing: -0.75px;
+  line-height: 1.2;
   text-wrap: balance;
 }
 
@@ -190,15 +243,15 @@ summary:focus-visible {
 .sync-time span {
   color: var(--ink-secondary);
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 550;
 }
 
 .sync-time time,
 .sync-time strong {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 580;
+  font-weight: 500;
 }
 
 .status-tabs {
@@ -215,7 +268,7 @@ summary:focus-visible {
   min-height: 44px;
   color: var(--ink-secondary);
   font-size: 0.875rem;
-  font-weight: 680;
+  font-weight: 550;
   text-decoration: none;
   transition: color var(--transition-state), box-shadow var(--transition-state);
 }
@@ -226,7 +279,7 @@ summary:focus-visible {
 }
 
 .status-tab-active {
-  box-shadow: inset 0 -2px 0 var(--teal);
+  box-shadow: inset 0 -2px 0 var(--ember);
 }
 
 .status-tab span {
@@ -235,7 +288,7 @@ summary:focus-visible {
   border-radius: 4px;
   background: var(--bench);
   color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -255,9 +308,11 @@ summary:focus-visible {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
   overflow: clip;
-  border: 1px solid var(--rule);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--canvas);
+  /* Shadow only: it already includes a 1px ring, and pairing it with a border
+     is the ghost-card look. */
+  box-shadow: var(--shadow-subtle);
 }
 
 .score-rail {
@@ -272,14 +327,14 @@ summary:focus-visible {
 .score-rail > span:first-child {
   color: var(--ink-secondary);
   font-size: 0.75rem;
-  font-weight: 680;
+  font-weight: 550;
 }
 
 .score-rail strong {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 1.625rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 720;
+  font-weight: 600;
   letter-spacing: -0.03em;
 }
 
@@ -297,7 +352,7 @@ summary:focus-visible {
   display: block;
   width: var(--match-score);
   height: 100%;
-  background: var(--teal);
+  background: var(--ember);
 }
 
 .candidate-body {
@@ -322,36 +377,46 @@ summary:focus-visible {
 .candidate-heading-line h2 {
   margin: 0;
   font-size: 1.125rem;
-  font-weight: 720;
+  font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.25;
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
+/* Three states, one accent. Each chip differs in border style and fill as well
+   as wording, so the state survives greyscale, low vision, and print. */
 .status-chip {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
   padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  line-height: 1.33;
+  letter-spacing: 0.2px;
   text-transform: capitalize;
 }
 
+/* Needs a decision: the only state that earns the accent. */
 .status-pending {
+  border-color: var(--ember);
   background: var(--pending-bg);
   color: var(--pending-ink);
 }
 
+/* Settled and acted on: solid ink, no border. */
 .status-approved {
   background: var(--approved-bg);
   color: var(--approved-ink);
 }
 
+/* Settled and dismissed: dashed outline, nothing filled in. */
 .status-rejected {
+  border-style: dashed;
+  border-color: var(--ink-quiet);
   background: var(--rejected-bg);
   color: var(--rejected-ink);
 }
@@ -359,7 +424,7 @@ summary:focus-visible {
 .candidate-id {
   margin: 5px 0 0;
   color: var(--ink-secondary);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
@@ -369,7 +434,7 @@ summary:focus-visible {
   flex: 0 0 auto;
   gap: 4px;
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
@@ -410,7 +475,7 @@ summary:focus-visible {
 
 .data-value {
   color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -426,7 +491,7 @@ summary:focus-visible {
   display: block;
   width: var(--component-score);
   height: 100%;
-  background: var(--teal);
+  background: var(--ember);
 }
 
 .component-track-empty > span {
@@ -454,7 +519,7 @@ summary:focus-visible {
 .entity-kind {
   color: var(--ink-secondary);
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 550;
 }
 
 .identity-block strong {
@@ -465,7 +530,7 @@ summary:focus-visible {
 
 .entity-slug {
   color: var(--ink-secondary);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
@@ -475,7 +540,7 @@ summary:focus-visible {
   place-items: center;
   color: var(--teal-deep);
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .evidence-columns {
@@ -493,7 +558,7 @@ summary:focus-visible {
 .repository-evidence h4 {
   margin: 0 0 12px;
   font-size: 0.8125rem;
-  font-weight: 720;
+  font-weight: 600;
 }
 
 .evidence-facts {
@@ -534,7 +599,7 @@ summary:focus-visible {
 }
 
 .repo-list li {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
 }
 
@@ -557,7 +622,7 @@ summary:focus-visible {
   margin: 0 0 3px;
   color: var(--ink-secondary);
   font-size: 0.75rem;
-  font-weight: 680;
+  font-weight: 550;
 }
 
 .report-provenance a {
@@ -566,7 +631,7 @@ summary:focus-visible {
   min-height: 44px;
   color: var(--teal-deep);
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 600;
   overflow-wrap: anywhere;
   text-underline-offset: 3px;
 }
@@ -574,7 +639,7 @@ summary:focus-visible {
 .report-provenance time,
 .report-provenance span {
   color: var(--ink-secondary);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
@@ -590,17 +655,17 @@ summary:focus-visible {
   gap: 12px 20px;
   margin: 4px 0 20px;
   padding: 16px;
-  border: 1px solid oklch(0.79 0.055 145);
-  border-radius: 8px;
-  background: var(--approved-bg);
+  border: 1px solid var(--panel-settled-rule);
+  border-radius: var(--radius-lg);
+  background: var(--panel-settled-bg);
 }
 
 .approved-evidence h3 {
   grid-column: 1 / -1;
   margin: 0;
-  color: var(--approved-ink);
+  color: var(--settled-ink);
   font-size: 0.8125rem;
-  font-weight: 720;
+  font-weight: 600;
 }
 
 .approved-evidence > p {
@@ -620,7 +685,7 @@ summary:focus-visible {
 }
 
 .decision-impact strong {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
 }
 
@@ -655,10 +720,10 @@ summary:focus-visible {
   gap: 16px;
   margin-top: 4px;
   padding: 14px 16px;
-  border: 1px solid oklch(0.79 0.08 28);
-  border-radius: 8px;
+  border: 1px solid var(--ember);
+  border-radius: var(--radius-lg);
   background: var(--error-bg);
-  color: var(--rejected-ink);
+  color: var(--danger-ink);
 }
 
 .conflict-banner p {
@@ -677,7 +742,7 @@ summary:focus-visible {
   color: var(--ink-secondary);
   cursor: pointer;
   font-size: 0.8125rem;
-  font-weight: 680;
+  font-weight: 550;
 }
 
 .rationale-disclosure pre {
@@ -732,24 +797,26 @@ summary:focus-visible {
 .button-primary,
 .button-secondary {
   min-height: 44px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 10px 16px;
-  font-size: 0.875rem;
-  font-weight: 700;
+  font-size: var(--text-body);
+  font-weight: 600;
   line-height: 1.15;
   cursor: pointer;
   transition: background var(--transition-state), border-color var(--transition-state), color var(--transition-state);
 }
 
+/* Approve writes durable data, so it carries the most weight on the card. Ink
+   rather than ember: this is the deliberate action, not the dangerous one. */
 .button-primary {
-  border: 1px solid var(--teal);
-  background: var(--teal);
+  border: 1px solid var(--ink);
+  background: var(--ink);
   color: var(--canvas);
 }
 
 .button-primary:hover:not(:disabled) {
-  border-color: var(--teal-deep);
-  background: var(--teal-deep);
+  border-color: var(--ink-soft);
+  background: var(--ink-soft);
 }
 
 .button-secondary {
@@ -763,17 +830,22 @@ summary:focus-visible {
   background: var(--bench);
 }
 
+/* Reject changes nothing durable, so it stays quiet until hover and then
+   borrows the accent to say the decision is real. */
 .button-reject:hover:not(:disabled) {
-  border-color: oklch(0.69 0.11 28);
-  background: var(--rejected-bg);
-  color: var(--rejected-ink);
+  border-color: var(--ember);
+  background: var(--ember-soft);
+  color: var(--pending-ink);
 }
 
+/* Disabled is exempt from the contrast minimum, but the operator reads this
+   label while deciding whether to confirm, so it stays legible. The fill, not
+   the text colour, is what says "not yet". */
 .button-primary:disabled,
 .button-secondary:disabled {
   border-color: var(--rule);
   background: var(--bench-strong);
-  color: oklch(0.5 0.015 200);
+  color: var(--ink-secondary);
   cursor: not-allowed;
 }
 
@@ -798,7 +870,7 @@ summary:focus-visible {
   min-height: 1.4em;
   margin: 10px 0 0;
   font-size: 0.8125rem;
-  font-weight: 650;
+  font-weight: 550;
 }
 
 .action-message-idle:empty {
@@ -807,20 +879,20 @@ summary:focus-visible {
 }
 
 .action-message-success {
-  color: var(--approved-ink);
+  color: var(--settled-ink);
 }
 
 .action-message-error {
-  color: var(--rejected-ink);
+  color: var(--danger-ink);
 }
 
 .decision-locked {
   margin: 16px 0 0;
   padding-top: 14px;
   border-top: 1px solid var(--rule);
-  color: var(--approved-ink);
+  color: var(--settled-ink);
   font-size: 0.8125rem;
-  font-weight: 680;
+  font-weight: 550;
 }
 
 .empty-state,
@@ -843,8 +915,8 @@ summary:focus-visible {
   border-radius: 8px;
   background: var(--canvas);
   color: var(--teal-deep);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-weight: 760;
+  font-family: var(--font-mono);
+  font-weight: 600;
 }
 
 .empty-state h2 {
