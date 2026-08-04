@@ -105,6 +105,9 @@ export default async function TargetRoute({ params }: TargetRouteProps) {
 
   if (!target) notFound();
 
+  const skipped = new Set<string>(target.score.skipped);
+  const neverCollected = target.missingSignals.filter((type) => !skipped.has(type));
+
   return (
     <main className="page-shell" id="main-content">
       <ConsoleNavbar activeSection="targets" />
@@ -125,6 +128,9 @@ export default async function TargetRoute({ params }: TargetRouteProps) {
         <p className="sync-time">
           <span>Score</span>
           <strong>{target.score.total.toFixed(1)}</strong>
+          <span className="score-ceiling">
+            ceiling {Math.round(target.score.coverage * 100)}
+          </span>
         </p>
       </section>
 
@@ -148,12 +154,28 @@ export default async function TargetRoute({ params }: TargetRouteProps) {
             />
           ))}
         </div>
+        {/* Each signal is explained once. A signal that was collected but fell
+            below the confidence floor is a different situation from one that
+            was never collected, and listing it under both reads as a
+            contradiction. */}
         {target.score.skipped.length > 0 ? (
           <p className="signal-skipped">
-            Excluded from the score for want of data:{' '}
-            {target.score.skipped.map((type) => signalLabels[type] ?? type).join(', ')}. Their weight
-            is redistributed across the signals that remain, so a gap in collection does not push a
-            target down the list.
+            Collected but not trusted:{' '}
+            {target.score.skipped.map((type) => signalLabels[type] ?? type).join(', ')}. These fell
+            below the confidence floor, so they contribute nothing rather than contributing a guess.
+          </p>
+        ) : null}
+        {neverCollected.length > 0 ? (
+          <p className="signal-skipped">
+            Never collected for this target:{' '}
+            {neverCollected.map((type) => signalLabels[type] ?? type).join(', ')}.
+          </p>
+        ) : null}
+        {target.score.coverage < 1 ? (
+          <p className="signal-skipped">
+            The score is scaled by how much of the scale could be measured, so this target cannot
+            exceed {Math.round(target.score.coverage * 100)} until the rest is collected. A low
+            number here is a gap in our evidence, not a verdict on the code.
           </p>
         ) : null}
       </section>

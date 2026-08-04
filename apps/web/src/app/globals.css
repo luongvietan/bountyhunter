@@ -1774,3 +1774,35 @@ summary:focus-visible {
     grid-column: 1;
   }
 }
+
+.target-score {
+  display: grid;
+  gap: 1px;
+}
+
+.target-coverage {
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* A signal we never measured, shown rather than omitted: without it a low
+   score looks like a verdict on the target instead of a gap in our data. */
+.signal-pill-missing {
+  border: 1px dashed var(--rule);
+  background: transparent;
+  color: var(--ink-quiet);
+}
+
+.signal-pill-missing .signal-pill-value {
+  font-family: var(--font-sans);
+  font-weight: 400;
+}
+
+.score-ceiling {
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

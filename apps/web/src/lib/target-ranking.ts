@@ -42,6 +42,12 @@ export interface RankedTarget {
   scopeFiles: string[];
   /** Why audit_gap is what it is, when it is not a measurement. */
   auditGapReason: string | null;
+  /**
+   * Configured signals that contributed nothing, so the row can say what the
+   * ceiling is made of. A score of 33 with two signals missing is a statement
+   * about our coverage, not about the target.
+   */
+  missingSignals: SignalType[];
 }
 
 export interface RankingFilters {
@@ -137,8 +143,18 @@ function toTarget(scope: ScopeWithEvidence, weights: Weights): RankedTarget {
 
   const gap = signals.find((signal) => signal.type === 'audit_gap');
   const reason = gap && typeof gap.evidence.reason === 'string' ? gap.evidence.reason : null;
+  const computed = score(scoreInput, weights);
+
+  // What the score could not see. A ceiling of 33 means two of three signals
+  // were never measured, and the row has to say which, or the number reads as
+  // a judgement on the target rather than on our coverage of it.
+  const contributed = new Set(computed.breakdown.map((part) => part.type));
+  const missingSignals = (Object.keys(weights.weights) as SignalType[])
+    .filter((type) => (weights.weights[type] ?? 0) > 0 && !contributed.has(type))
+    .sort();
 
   return {
+    missingSignals,
     scopeId: scope.id,
     repoKey: scope.hardKey ?? scope.repoUrl ?? scope.id,
     programTitle: scope.program.title,
@@ -156,7 +172,7 @@ function toTarget(scope: ScopeWithEvidence, weights: Weights): RankedTarget {
       },
     ],
     commitish: scope.commitish,
-    score: score(scoreInput, weights),
+    score: computed,
     signals,
     scopeFiles: gap ? stringList(gap.evidence.files) : [],
     auditGapReason: reason,

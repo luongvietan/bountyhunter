@@ -63,7 +63,14 @@ function TargetRow({ target, rank }: { target: RankedTarget; rank: number }) {
   return (
     <li className="target-row">
       <span className="target-rank">{rank}</span>
-      <span className="target-score">{target.score.total.toFixed(1)}</span>
+      <span className="target-score">
+        {target.score.total.toFixed(1)}
+        {/* The ceiling, spelled out: a score is only as high as the share of
+            the scale we actually measured. */}
+        <span className="target-coverage" title={`${Math.round(target.score.coverage * 100)}% of the scale measured`}>
+          {target.score.breakdown.length}/{target.score.breakdown.length + target.missingSignals.length}
+        </span>
+      </span>
       <span className="target-identity">
         <Link href={`/targets/${target.scopeId}`}>{target.repoKey}</Link>
         <span className="target-program">
@@ -81,6 +88,14 @@ function TargetRow({ target, rank }: { target: RankedTarget; rank: number }) {
           </span>
         ))}
         {reason ? <span className="signal-pill signal-pill-assumed">{reason}</span> : null}
+        {/* Absent signals stay on the row rather than vanishing, so a low score
+            reads as "not measured" rather than "not worth scanning". */}
+        {target.missingSignals.map((type) => (
+          <span className="signal-pill signal-pill-missing" key={type}>
+            <span className="signal-pill-label">{signalLabels[type] ?? type}</span>
+            <span className="signal-pill-value">not measured</span>
+          </span>
+        ))}
       </span>
       <span className="target-pool">{formatPool(target.poolUsd)}</span>
       <span className="target-files">
