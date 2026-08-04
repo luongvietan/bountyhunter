@@ -5,8 +5,8 @@ import { GeistSans } from 'geist/font/sans';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Merge review queue | Kritt Radar',
-  description: 'Internal evidence review for uncertain entity matches.',
+  title: { default: 'Kritt Radar', template: '%s | Kritt Radar' },
+  description: 'Internal operator console for evidence-backed target review.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

@@ -1121,3 +1121,402 @@ summary:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Target ranking
+   --------------------------------------------------------------------------- */
+
+.masthead-nav {
+  display: flex;
+  gap: 20px;
+}
+
+.masthead-nav a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-secondary);
+  font-size: var(--text-body);
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.masthead-nav a:hover,
+.masthead-nav a[aria-current='page'] {
+  color: var(--ink);
+}
+
+.masthead-nav a[aria-current='page'] {
+  box-shadow: inset 0 -2px 0 var(--ember);
+}
+
+.breadcrumb {
+  margin: 0 0 6px;
+  font-size: var(--text-caption);
+  font-weight: 550;
+}
+
+.breadcrumb a {
+  color: var(--ink-secondary);
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  font-weight: 550;
+  text-decoration: none;
+  transition: border-color var(--transition-state), color var(--transition-state);
+}
+
+.filter-chip:hover {
+  border-color: var(--ink-secondary);
+  color: var(--ink);
+}
+
+/* Selected filters read as ink-on-paper rather than accent fills: several can
+   be active at once and a row of ember chips would drown the pending marks
+   that the accent is reserved for. */
+.filter-chip-active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--canvas);
+}
+
+.filter-chip span {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bench-strong);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-chip-active span {
+  background: rgb(255 255 255 / 0.18);
+  color: var(--canvas);
+}
+
+.result-count {
+  margin: 0 0 12px;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.target-table {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--rule);
+  border-radius: var(--radius-xl);
+  overflow: clip;
+  box-shadow: var(--shadow-subtle);
+}
+
+.target-row {
+  display: grid;
+  grid-template-columns: 40px 62px minmax(0, 1.4fr) minmax(0, 1.5fr) 76px 84px;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--canvas);
+}
+
+.target-head {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: var(--bench);
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.target-rank,
+.target-score,
+.target-pool,
+.target-files {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.target-rank {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.target-score {
+  font-size: var(--text-body-lg);
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.target-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.target-identity a {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.target-identity a:hover {
+  text-decoration: underline;
+}
+
+.target-program {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  overflow-wrap: anywhere;
+}
+
+.target-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.signal-pill {
+  display: inline-flex;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  background: var(--bench);
+  font-size: var(--text-caption);
+}
+
+.signal-pill-label {
+  color: var(--ink-secondary);
+}
+
+.signal-pill-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+
+/* An assumed audit gap is marked, not hidden: the operator should see at a
+   glance which rows rank on evidence and which rank on absence of it. */
+.signal-pill-assumed {
+  border: 1px dashed var(--ink-quiet);
+  background: var(--canvas);
+  color: var(--ink-secondary);
+}
+
+.target-pool,
+.target-files {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------------------
+   Target detail
+   --------------------------------------------------------------------------- */
+
+.queue-region h2 {
+  margin: 0 0 12px;
+  font-size: var(--text-subheading);
+  font-weight: 600;
+  line-height: 1.56;
+}
+
+.scope-handoff {
+  border-radius: var(--radius-xl);
+  background: var(--canvas);
+  box-shadow: var(--shadow-subtle);
+  overflow: clip;
+}
+
+.scope-handoff-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.scope-handoff-count {
+  margin: 0 0 2px;
+  font-weight: 550;
+}
+
+.scope-handoff-ref {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  overflow-wrap: anywhere;
+}
+
+.scope-handoff-text {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: var(--bench);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.scope-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-lg);
+  color: var(--ink-secondary);
+}
+
+.signal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.signal-card {
+  padding: 16px;
+  border-radius: var(--radius-xl);
+  background: var(--canvas);
+  box-shadow: var(--shadow-subtle);
+}
+
+.signal-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.signal-card h3 {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.signal-card header .data-value {
+  margin: 0;
+  font-size: var(--text-heading-sm);
+  font-weight: 600;
+  letter-spacing: -0.6px;
+}
+
+.signal-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.signal-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.signal-facts dt {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.signal-facts dd {
+  margin: 0;
+  font-size: var(--text-caption);
+}
+
+.signal-reason {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.signal-skipped {
+  max-width: 70ch;
+  margin: 16px 0 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  text-wrap: pretty;
+}
+
+@media (max-width: 900px) {
+  .target-row {
+    grid-template-columns: 32px 56px minmax(0, 1fr);
+    grid-template-areas:
+      'rank score identity'
+      '. . signals'
+      '. . meta';
+    row-gap: 8px;
+  }
+
+  .target-rank { grid-area: rank; }
+  .target-score { grid-area: score; }
+  .target-identity { grid-area: identity; }
+  .target-signals { grid-area: signals; }
+
+  .target-pool,
+  .target-files {
+    grid-area: meta;
+    text-align: left;
+  }
+
+  .target-files {
+    justify-self: end;
+  }
+
+  .target-head {
+    display: none;
+  }
+}
+
+.target-alsoin {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.scope-handoff-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.scope-handoff-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
