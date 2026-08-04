@@ -158,6 +158,11 @@ async function syncConfigAliases(
       key,
       target,
     })),
+    ...[...aliases.byDefillama].map(([key, target]) => ({
+      kind: 'defillama',
+      key,
+      target,
+    })),
   ];
   const entityIds = new Set<string>();
 

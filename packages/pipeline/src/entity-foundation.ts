@@ -1,4 +1,4 @@
-export type AliasKind = 'repo' | 'platform_name' | 'audit_hint';
+export type AliasKind = 'repo' | 'platform_name' | 'audit_hint' | 'defillama';
 
 export interface EntitySeed {
   slug: string;
