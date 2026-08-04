@@ -183,6 +183,109 @@ describe('toImmunefiRecords', () => {
   });
 });
 
+describe('toImmunefiRecords — contract scope', () => {
+  const contractRow = {
+    sourceUrl: 'https://immunefi.com/bounty/hedera/',
+    changedAt: new Date('2026-08-03T00:00:00Z'),
+    payload: {
+      platform: 'immunefi',
+      externalId: 'hedera',
+      title: 'Hedera',
+      url: 'https://immunefi.com/bounty/hedera/',
+      poolUsd: 1000000,
+      maxBountyUsd: 30000,
+      kind: 'bounty',
+      publishedAt: '2025-02-05T04:21:00.000Z',
+      updatedAt: '2026-08-03T04:00:00.000Z',
+      assets: [
+        {
+          assetId: 'a1',
+          repoKey: 'github.com/hiero-ledger/hiero-consensus-node',
+          type: 'blockchain_dlt',
+          addedAt: '2025-01-31T10:53:46.365Z',
+        },
+      ],
+      contracts: [
+        {
+          assetId: 'c1',
+          chain: 'ethereum',
+          address: '0x0123456789abcdef0123456789abcdef01234567',
+          addedAt: '2025-03-01T00:00:00.000Z',
+        },
+      ],
+    },
+  };
+
+  it('sinh một scope kind=contract kèm scope repo hiện có', () => {
+    const rs = toImmunefiRecords([contractRow]);
+    expect(rs).toHaveLength(1);
+    expect(rs[0]!.scopes).toHaveLength(2);
+    const contractScope = rs[0]!.scopes.find((s) => s.kind === 'contract');
+    expect(contractScope).toEqual({
+      kind: 'contract',
+      hardKey: 'ethereum:0x0123456789abcdef0123456789abcdef01234567',
+      repoUrl: null,
+      pathGlobs: [],
+      chain: 'ethereum',
+      address: '0x0123456789abcdef0123456789abcdef01234567',
+      addedAt: new Date('2025-03-01T00:00:00.000Z'),
+    });
+  });
+
+  it('gộp contract trùng hardKey và giữ addedAt mới nhất', () => {
+    const rs = toImmunefiRecords([
+      {
+        ...contractRow,
+        payload: {
+          ...contractRow.payload,
+          contracts: [
+            {
+              assetId: 'c1',
+              chain: 'Ethereum',
+              address: '0x0123456789ABCDEF0123456789abcdef01234567',
+              addedAt: '2025-01-01T00:00:00.000Z',
+            },
+            {
+              assetId: 'c2',
+              chain: 'ethereum',
+              address: '0x0123456789abcdef0123456789abcdef01234567',
+              addedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+      },
+    ]);
+    const contractScopes = rs[0]!.scopes.filter((s) => s.kind === 'contract');
+    expect(contractScopes).toHaveLength(1);
+    expect(contractScopes[0]!.addedAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+  });
+
+  it('bỏ contract có địa chỉ hỏng, không tạo scope rỗng', () => {
+    const rs = toImmunefiRecords([
+      {
+        ...contractRow,
+        payload: {
+          ...contractRow.payload,
+          contracts: [{ assetId: 'c1', chain: 'ethereum', address: 'not-an-address', addedAt: null }],
+        },
+      },
+    ]);
+    expect(rs[0]!.scopes.some((s) => s.kind === 'contract')).toBe(false);
+  });
+
+  it('program không có repo nhưng có contract thì vẫn giữ scopes gồm contract', () => {
+    const rs = toImmunefiRecords([
+      {
+        ...contractRow,
+        payload: { ...contractRow.payload, assets: [] },
+      },
+    ]);
+    expect(rs).toHaveLength(1);
+    expect(rs[0]!.scopes).toHaveLength(1);
+    expect(rs[0]!.scopes[0]!.kind).toBe('contract');
+  });
+});
+
 describe('toImmunefiRecords — cầu nối audit', () => {
   const withAudits = {
     sourceUrl: 'https://immunefi.com/bounty/hedera/',

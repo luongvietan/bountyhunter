@@ -6,3 +6,4 @@ uniswap-v4:
   canonicalName: Uniswap v4
   match:
     - repo: github.com/uniswap/v4-core
+    - defillama: uniswap-v4

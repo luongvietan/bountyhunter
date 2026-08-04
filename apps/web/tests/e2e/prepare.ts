@@ -7,7 +7,7 @@ import {
   E2E_DATABASE_URL,
   assertDisposableDatabase,
 } from './database';
-import { seedMergeQueue, seedTargets } from './seed';
+import { seedMergeQueue, seedOutcomes, seedTargets } from './seed';
 
 const workspaceRoot = resolve(import.meta.dirname, '../../../..');
 
@@ -56,6 +56,7 @@ const prisma = new PrismaClient({ datasources: { db: { url: E2E_DATABASE_URL } }
 try {
   await seedMergeQueue(prisma);
   await seedTargets(prisma);
+  await seedOutcomes(prisma);
 } finally {
   await prisma.$disconnect();
 }

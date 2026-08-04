@@ -5,7 +5,9 @@ import {
   auditReportRepos,
   c4Contests,
   cantinaCompetitions,
+  defillamaTvl,
   immunefiPrograms,
+  makeEtherscanVerified,
   makeGithubRepoSnapshots,
   runCollector,
   sherlockContests,
@@ -13,7 +15,14 @@ import {
   type CollectorRunResult,
 } from '@kritt-radar/collectors';
 import { prisma, saveObservations } from '@kritt-radar/db';
-import { rankScopes, type ScopeSignals } from '@kritt-radar/pipeline';
+import {
+  listContractTargets,
+  materializeEtherscanVerified,
+  materializeProtocolTvl,
+  materializeValueAtRisk,
+  rankScopes,
+  type ScopeSignals,
+} from '@kritt-radar/pipeline';
 import {
   countDroppedContestPrograms,
   listRepoTargets,
@@ -28,11 +37,13 @@ const CATALOG_COLLECTORS: readonly Collector[] = [
   cantinaCompetitions,
   immunefiPrograms,
   auditReportRepos,
+  defillamaTvl,
 ];
 
 export interface SyncDependencies {
   collectCatalog: () => Promise<unknown>;
   materializeCatalog: () => Promise<unknown>;
+  collectContracts: () => Promise<unknown>;
   collectGithub: () => Promise<unknown>;
   materializeSignals: () => Promise<unknown>;
   rank: () => Promise<unknown>;
@@ -46,12 +57,15 @@ export interface SyncDependencies {
 export async function sync(deps: SyncDependencies): Promise<void> {
   await deps.collectCatalog();
   await deps.materializeCatalog();
+  await deps.collectContracts();
   await deps.collectGithub();
   await deps.materializeSignals();
   await deps.rank();
 }
 
-async function recordCollectorRun(run: CollectorRunResult, phase: 'catalog' | 'github'): Promise<void> {
+type CollectorPhase = 'catalog' | 'onchain' | 'github';
+
+async function recordCollectorRun(run: CollectorRunResult, phase: CollectorPhase): Promise<void> {
   await prisma.collectorRun.create({
     data: {
       collectorId: run.collectorId,
@@ -68,7 +82,10 @@ async function recordCollectorRun(run: CollectorRunResult, phase: 'catalog' | 'g
   );
 }
 
-async function collectOne(collector: Collector, phase: 'catalog' | 'github'): Promise<CollectorRunResult> {
+async function collectOne(
+  collector: Collector,
+  phase: CollectorPhase,
+): Promise<CollectorRunResult> {
   const run = await runCollector(collector, {
     env: process.env,
     save: (items) => saveObservations(items),
@@ -103,6 +120,8 @@ async function materializeCatalog(): Promise<void> {
       `${result.programAudits} program-audits / ${result.candidates} candidates` +
       (droppedNoRepo > 0 ? `  (${droppedNoRepo} dropped: no repo in list endpoint)` : ''),
   );
+  const tvlCount = await materializeProtocolTvl(prisma);
+  console.log(`[catalog] protocolTvl: ${tvlCount} slugs`);
 }
 
 async function collectGithub(): Promise<CollectorRunResult> {
@@ -110,9 +129,20 @@ async function collectGithub(): Promise<CollectorRunResult> {
   return collectOne(collector, 'github');
 }
 
+async function collectContracts(): Promise<CollectorRunResult> {
+  const collector = makeEtherscanVerified(() => listContractTargets(prisma));
+  return collectOne(collector, 'onchain');
+}
+
 async function materializeSignals(): Promise<void> {
+  const etherscanResult = await materializeEtherscanVerified(prisma);
+  console.log(
+    `[signals] etherscan-verified: ${etherscanResult.matched}/${etherscanResult.observations} scopes matched`,
+  );
   const result = await materializeRepoSignals(prisma, new Date());
   console.log(`[signals] audit_gap: ${result.scopes} scopes / ${result.noData} no data`);
+  const varCount = await materializeValueAtRisk(prisma);
+  console.log(`[signals] value_at_risk: ${varCount} scopes`);
 }
 
 async function rank(): Promise<void> {
@@ -149,6 +179,7 @@ async function rank(): Promise<void> {
 const runtimeDependencies: SyncDependencies = {
   collectCatalog,
   materializeCatalog,
+  collectContracts,
   collectGithub,
   materializeSignals,
   rank,

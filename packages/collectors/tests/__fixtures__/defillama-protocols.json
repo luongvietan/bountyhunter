@@ -1,0 +1,19 @@
+[
+  {
+    "slug": "uniswap",
+    "name": "Uniswap",
+    "tvl": 4123456789.12,
+    "chains": ["Ethereum", "Arbitrum"]
+  },
+  {
+    "slug": "broken-no-tvl",
+    "name": "Broken",
+    "tvl": null,
+    "chains": []
+  },
+  {
+    "name": "NoSlug",
+    "tvl": 100,
+    "chains": ["Ethereum"]
+  }
+]

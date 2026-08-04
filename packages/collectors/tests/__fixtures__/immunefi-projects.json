@@ -19,6 +19,12 @@
         "url": "https://hedera.com/dashboard",
         "type": "websites_and_applications",
         "addedAt": "2026-07-30T00:00:00.000Z"
+      },
+      {
+        "id": "5ContractAssetIdHedera",
+        "url": "https://etherscan.io/address/0x0123456789abcdef0123456789abcdef01234567",
+        "type": "smart_contract",
+        "addedAt": "2025-03-01T00:00:00.000Z"
       }
     ]
   },

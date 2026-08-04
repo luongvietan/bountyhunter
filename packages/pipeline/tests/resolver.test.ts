@@ -14,6 +14,30 @@ orbit-lending:
 `);
 
 describe('resolveEntityKey — tầng 1 khoá cứng', () => {
+  it('parses defillama slug aliases', () => {
+    const table = parseAliases(`
+uniswap-v4:
+  canonicalName: Uniswap v4
+  match:
+    - repo: github.com/uniswap/v4-core
+    - defillama: Uniswap-V4
+`);
+    expect(table.byDefillama.get('uniswap-v4')).toEqual({
+      slug: 'uniswap-v4',
+      canonicalName: 'Uniswap v4',
+    });
+  });
+
+  it('does not create empty defillama alias keys', () => {
+    const table = parseAliases(`
+uniswap-v4:
+  canonicalName: Uniswap v4
+  match:
+    - defillama: "   "
+`);
+    expect(table.byDefillama.size).toBe(0);
+  });
+
   it('khớp bằng repo key chuẩn hoá', () => {
     const r = resolveEntityKey({ repoUrl: 'https://github.com/Uniswap/v4-core.git' }, aliases);
     expect(r).toEqual({ slug: 'uniswap-v4', canonicalName: 'Uniswap v4', tier: 1 });

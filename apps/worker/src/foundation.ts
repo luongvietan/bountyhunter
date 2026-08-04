@@ -24,9 +24,12 @@ const CANDIDATE_THRESHOLD = 0.65;
 
 type Transaction = Prisma.TransactionClient;
 type ScopeInput = {
+  kind?: 'repo' | 'contract';
   hardKey: string;
-  repoUrl: string;
+  repoUrl: string | null;
   pathGlobs: string[];
+  chain?: string;
+  address?: string;
   addedAt: Date | null;
 };
 type ProgramInput = {
@@ -158,6 +161,11 @@ async function syncConfigAliases(
       key,
       target,
     })),
+    ...[...aliases.byDefillama].map(([key, target]) => ({
+      kind: 'defillama',
+      key,
+      target,
+    })),
   ];
   const entityIds = new Set<string>();
 
@@ -247,10 +255,12 @@ async function upsertProgram(
       where: { programId: saved.id, hardKey: scopeInput.hardKey },
     });
     const scopeData = {
-      kind: 'repo',
+      kind: scopeInput.kind ?? 'repo',
       hardKey: scopeInput.hardKey,
       repoUrl: scopeInput.repoUrl,
       pathGlobs: scopeInput.pathGlobs,
+      chain: scopeInput.chain ?? null,
+      address: scopeInput.address ?? null,
     };
     const scope = existing
       ? await tx.scope.update({ where: { id: existing.id }, data: scopeData })

@@ -6,6 +6,7 @@ const MatchRule = z.union([
   z.object({ repo: z.string() }),
   z.object({ platformName: z.object({ platform: z.string(), name: z.string() }) }),
   z.object({ auditHint: z.string() }),
+  z.object({ defillama: z.string() }),
 ]);
 
 const AliasEntry = z.object({
@@ -19,6 +20,7 @@ export type AliasTable = {
   byRepoKey: Map<string, { slug: string; canonicalName: string }>;
   byPlatformName: Map<string, { slug: string; canonicalName: string }>;
   byAuditHint: Map<string, { slug: string; canonicalName: string }>;
+  byDefillama: Map<string, { slug: string; canonicalName: string }>;
 };
 
 function platformNameKey(platform: string, name: string): string {
@@ -30,6 +32,7 @@ export function parseAliases(yamlText: string): AliasTable {
   const byRepoKey = new Map<string, { slug: string; canonicalName: string }>();
   const byPlatformName = new Map<string, { slug: string; canonicalName: string }>();
   const byAuditHint = new Map<string, { slug: string; canonicalName: string }>();
+  const byDefillama = new Map<string, { slug: string; canonicalName: string }>();
 
   for (const [slug, entry] of Object.entries(parsed)) {
     const target = { slug, canonicalName: entry.canonicalName };
@@ -42,12 +45,15 @@ export function parseAliases(yamlText: string): AliasTable {
           platformNameKey(rule.platformName.platform, rule.platformName.name),
           target,
         );
-      } else {
+      } else if ('auditHint' in rule) {
         byAuditHint.set(rule.auditHint.trim().toLowerCase(), target);
+      } else if ('defillama' in rule) {
+        const key = rule.defillama.trim().toLowerCase();
+        if (key) byDefillama.set(key, target);
       }
     }
   }
-  return { byRepoKey, byPlatformName, byAuditHint };
+  return { byRepoKey, byPlatformName, byAuditHint, byDefillama };
 }
 
 export interface ResolveInput {

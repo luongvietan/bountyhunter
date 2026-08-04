@@ -1,0 +1,12 @@
+{
+  "status": "1",
+  "message": "OK",
+  "result": [
+    {
+      "SourceCode": "",
+      "ContractName": "",
+      "CompilerVersion": "",
+      "ABI": "Contract source code not verified"
+    }
+  ]
+}

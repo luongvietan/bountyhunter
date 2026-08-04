@@ -1,5 +1,6 @@
 import { githubRepoSnapshotSourceKey, type RepoTarget } from '@kritt-radar/collectors';
 import { PrismaClient } from '@kritt-radar/db';
+import { listContractTargets, materializeEtherscanVerified } from '@kritt-radar/pipeline';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   countDroppedContestPrograms,
@@ -1104,6 +1105,121 @@ describe('materializeRepoSignals', () => {
   });
 });
 
+describe('Immunefi contract scopes → listContractTargets → etherscan-verified', () => {
+  const contractAddress = '0x0123456789abcdef0123456789abcdef01234567';
+
+  async function seedImmunefiContractProgram(): Promise<void> {
+    await prisma.observation.create({
+      data: {
+        collectorId: 'immunefi-programs',
+        sourceUrl: 'https://immunefi.com/bounty/contract-fixture/',
+        fetchedAt: now,
+        contentHash: 'immunefi-contract-fixture',
+        payload: {
+          platform: 'immunefi',
+          externalId: 'contract-fixture',
+          title: 'Contract Fixture',
+          url: 'https://immunefi.com/bounty/contract-fixture/',
+          poolUsd: 50_000,
+          maxBountyUsd: 20_000,
+          kind: 'bounty',
+          publishedAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: null,
+          assets: [],
+          contracts: [
+            {
+              assetId: 'contract-asset-1',
+              chain: 'ethereum',
+              address: contractAddress,
+              addedAt: '2026-01-15T00:00:00.000Z',
+            },
+          ],
+          audits: [],
+        },
+      },
+    });
+  }
+
+  it('materializes a Scope(kind=contract) that listContractTargets returns', async () => {
+    await seedImmunefiContractProgram();
+    await materializeCatalogFoundation(prisma, aliasesYaml, now);
+
+    const scope = await prisma.scope.findFirstOrThrow({
+      where: { program: { platform: 'immunefi', externalId: 'contract-fixture' } },
+    });
+    expect(scope).toMatchObject({
+      kind: 'contract',
+      chain: 'ethereum',
+      address: contractAddress,
+      hardKey: `ethereum:${contractAddress}`,
+      repoUrl: null,
+      pathGlobs: [],
+    });
+
+    const targets = await listContractTargets(prisma);
+    expect(targets).toContainEqual({ chain: 'ethereum', address: contractAddress });
+  });
+
+  it('materializeEtherscanVerified matches an observation back to its Scope by hardKey', async () => {
+    await seedImmunefiContractProgram();
+    await materializeCatalogFoundation(prisma, aliasesYaml, now);
+    const scope = await prisma.scope.findFirstOrThrow({
+      where: { program: { platform: 'immunefi', externalId: 'contract-fixture' } },
+    });
+
+    // Simulate an out-of-band Scope missing its hardKey; materialize must repair it.
+    await prisma.scope.update({ where: { id: scope.id }, data: { hardKey: null } });
+
+    await prisma.observation.create({
+      data: {
+        collectorId: 'etherscan-verified',
+        sourceUrl: `https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=${contractAddress}`,
+        fetchedAt: now,
+        contentHash: 'etherscan-verified-fixture',
+        payload: {
+          chain: 'ethereum',
+          address: contractAddress,
+          verified: true,
+          contractName: 'FixtureContract',
+          compiler: 'v0.8.20',
+          sourceUrl: `https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=${contractAddress}`,
+        },
+      },
+    });
+
+    const result = await materializeEtherscanVerified(prisma);
+    expect(result).toEqual({ observations: 1, matched: 1 });
+
+    const repaired = await prisma.scope.findUniqueOrThrow({ where: { id: scope.id } });
+    expect(repaired.hardKey).toBe(`ethereum:${contractAddress}`);
+    // materializeEtherscanVerified must not create a Signal — only the pre-existing
+    // freshness signal from materializeCatalogFoundation should be present.
+    const signals = await prisma.signal.findMany({ where: { scopeId: scope.id } });
+    expect(signals.map((s) => s.type)).toEqual(['freshness']);
+  });
+
+  it('does not match etherscan observations for addresses with no Scope', async () => {
+    await prisma.observation.create({
+      data: {
+        collectorId: 'etherscan-verified',
+        sourceUrl: 'https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=0xffffffffffffffffffffffffffffffffffffff',
+        fetchedAt: now,
+        contentHash: 'etherscan-verified-orphan',
+        payload: {
+          chain: 'ethereum',
+          address: '0xffffffffffffffffffffffffffffffffffffff',
+          verified: false,
+          contractName: null,
+          compiler: null,
+          sourceUrl: 'https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=0xffffffffffffffffffffffffffffffffffffff',
+        },
+      },
+    });
+
+    expect(await materializeEtherscanVerified(prisma)).toEqual({ observations: 1, matched: 0 });
+  });
+});
+
 describe('sync', () => {
   it('runs the two-phase catalog and GitHub stages in exact dependency order', async () => {
     const calls: string[] = [];
@@ -1114,6 +1230,7 @@ describe('sync', () => {
     await sync({
       collectCatalog: stage('collect-catalog'),
       materializeCatalog: stage('materialize-catalog'),
+      collectContracts: stage('collect-contracts'),
       collectGithub: stage('collect-github'),
       materializeSignals: stage('materialize-signals'),
       rank: stage('rank'),
@@ -1122,6 +1239,7 @@ describe('sync', () => {
     expect(calls).toEqual([
       'collect-catalog',
       'materialize-catalog',
+      'collect-contracts',
       'collect-github',
       'materialize-signals',
       'rank',
@@ -1137,6 +1255,7 @@ describe('sync', () => {
     await sync({
       collectCatalog: stage('collect-catalog'),
       materializeCatalog: stage('materialize-catalog'),
+      collectContracts: stage('collect-contracts'),
       collectGithub: async () => {
         calls.push('collect-github:partial');
         return { status: 'partial' as const };
@@ -1148,6 +1267,7 @@ describe('sync', () => {
     expect(calls).toEqual([
       'collect-catalog',
       'materialize-catalog',
+      'collect-contracts',
       'collect-github:partial',
       'materialize-signals',
       'rank',
@@ -1168,6 +1288,7 @@ describe('sync', () => {
           calls.push('materialize-catalog');
           throw hardError;
         },
+        collectContracts: stage('collect-contracts'),
         collectGithub: stage('collect-github'),
         materializeSignals: stage('materialize-signals'),
         rank: stage('rank'),
