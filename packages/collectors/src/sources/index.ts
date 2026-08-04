@@ -42,3 +42,8 @@ export {
   type ImmunefiProgramPayload,
   type ImmunefiAsset,
 } from './immunefi-programs.js';
+export {
+  defillamaTvl,
+  parseDefillamaProtocols,
+  type DefillamaTvlPayload,
+} from './defillama-tvl.js';
