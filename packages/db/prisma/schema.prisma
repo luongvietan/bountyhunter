@@ -53,6 +53,7 @@ model Scope {
   address   String?
   signals   Signal[]
   scores    Score[]
+  outcomes  Outcome[]
 
   @@index([programId])
   @@index([hardKey])
@@ -155,4 +156,31 @@ model CollectorRun {
   error       String?
 
   @@index([collectorId, startedAt])
+}
+
+model ProtocolTvl {
+  slug          String   @id
+  name          String
+  tvlUsd        Decimal  @db.Decimal(20, 2)
+  chains        String[]
+  observationId String
+  fetchedAt     DateTime
+
+  @@index([fetchedAt])
+}
+
+model Outcome {
+  id             String   @id @default(cuid())
+  scope          Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  scopeId        String
+  action         String
+  submittedAt    DateTime
+  result         String
+  payoutUsd      Decimal? @db.Decimal(20, 2)
+  notes          String?
+  signalSnapshot Json
+  createdAt      DateTime @default(now())
+
+  @@index([scopeId, submittedAt])
+  @@index([result, submittedAt])
 }
