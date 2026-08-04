@@ -5,6 +5,7 @@ import {
   auditReportRepos,
   c4Contests,
   cantinaCompetitions,
+  defillamaTvl,
   immunefiPrograms,
   makeGithubRepoSnapshots,
   runCollector,
@@ -13,7 +14,7 @@ import {
   type CollectorRunResult,
 } from '@kritt-radar/collectors';
 import { prisma, saveObservations } from '@kritt-radar/db';
-import { rankScopes, type ScopeSignals } from '@kritt-radar/pipeline';
+import { materializeProtocolTvl, rankScopes, type ScopeSignals } from '@kritt-radar/pipeline';
 import {
   countDroppedContestPrograms,
   listRepoTargets,
@@ -28,6 +29,7 @@ const CATALOG_COLLECTORS: readonly Collector[] = [
   cantinaCompetitions,
   immunefiPrograms,
   auditReportRepos,
+  defillamaTvl,
 ];
 
 export interface SyncDependencies {
@@ -103,6 +105,8 @@ async function materializeCatalog(): Promise<void> {
       `${result.programAudits} program-audits / ${result.candidates} candidates` +
       (droppedNoRepo > 0 ? `  (${droppedNoRepo} dropped: no repo in list endpoint)` : ''),
   );
+  const tvlCount = await materializeProtocolTvl(prisma);
+  console.log(`[catalog] protocolTvl: ${tvlCount} slugs`);
 }
 
 async function collectGithub(): Promise<CollectorRunResult> {

@@ -5,5 +5,6 @@ export * from './run.js';
 export * from './materialize.js';
 export * from './audit-materialize.js';
 export * from './repo-signals.js';
+export * from './protocol-tvl.js';
 export * from './extractors/freshness.js';
 export * from './extractors/audit-gap.js';
