@@ -2,7 +2,9 @@
   "name": "kritt-radar",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",
@@ -17,7 +19,8 @@
     "sync": "pnpm build && pnpm --filter @kritt-radar/worker run cli sync",
     "collect": "pnpm --filter @kritt-radar/worker run cli collect",
     "materialize": "pnpm --filter @kritt-radar/worker run cli materialize",
-    "rank": "pnpm --filter @kritt-radar/worker run cli rank"
+    "rank": "pnpm --filter @kritt-radar/worker run cli rank",
+    "test:e2e": "pnpm --filter @kritt-radar/web run test:e2e"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

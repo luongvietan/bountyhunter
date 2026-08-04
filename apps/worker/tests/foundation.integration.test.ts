@@ -197,7 +197,15 @@ describe('materializeCatalogFoundation', () => {
   it('returns per-invocation counts and deterministically materializes exact and fallback entities', async () => {
     const result = await materializeCatalogFoundation(prisma, aliasesYaml, now);
 
-    expect(result).toEqual({ programs: 2, scopes: 2, entities: 2, reports: 2, candidates: 0 });
+    expect(result).toEqual({
+      programs: 2,
+      scopes: 2,
+      entities: 2,
+      reports: 2,
+      // Immunefi seeds carry no audits[], so the structural bridge contributes nothing here.
+      programAudits: 0,
+      candidates: 0,
+    });
     expect(await countDroppedContestPrograms(prisma)).toBe(1);
     expect(await prisma.entity.count()).toBe(3);
     expect(await prisma.entityAlias.count()).toBe(1);
@@ -771,7 +779,7 @@ describe('materializeRepoSignals', () => {
       ],
     });
 
-    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 1 });
+    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 1, auditCoverage: 'unsearched' });
     const [savedUniswapScope, savedAaveScope, uniswapSignal, aaveSignal] = await Promise.all([
       prisma.scope.findUniqueOrThrow({ where: { id: uniswapScope.id } }),
       prisma.scope.findUniqueOrThrow({ where: { id: aaveScope.id } }),
@@ -795,6 +803,7 @@ describe('materializeRepoSignals', () => {
     expect(await materializeRepoSignals(prisma, new Date(now.getTime() + 1_000))).toEqual({
       scopes: 2,
       noData: 1,
+      auditCoverage: 'unsearched',
     });
     expect(
       (
@@ -919,7 +928,7 @@ describe('materializeRepoSignals', () => {
       ],
     });
 
-    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 2 });
+    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 2, auditCoverage: 'unsearched' });
 
     const signal = await prisma.signal.findUniqueOrThrow({
       where: { scopeId_type: { scopeId: uniswapScope.id, type: 'audit_gap' } },
@@ -1056,6 +1065,7 @@ describe('materializeRepoSignals', () => {
     expect(await materializeRepoSignals(prisma, new Date(now.getTime() + 2_000))).toEqual({
       scopes: 3,
       noData: 1,
+      auditCoverage: 'unsearched',
     });
     const [firstSignal, secondSignal] = await Promise.all([
       prisma.signal.findUniqueOrThrow({
