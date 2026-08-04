@@ -238,3 +238,80 @@ export async function seedTargets(prisma: PrismaClient): Promise<void> {
     ],
   });
 }
+
+/**
+ * Five paid submissions on the already-seeded Zephyr Perps scope (measured
+ * audit gap + freshness live above), with varied signal snapshots so the
+ * payout correlation panel has enough of an audit_gap sample (>=5) to leave
+ * "unstable" while freshness (only present on three rows) stays below the
+ * floor and keeps showing the insufficient-samples banner.
+ */
+export async function seedOutcomes(prisma: PrismaClient): Promise<void> {
+  await prisma.outcome.createMany({
+    data: [
+      {
+        id: 'e2e-outcome-1',
+        scopeId: SEED.measuredScopeId,
+        action: 'submit',
+        submittedAt: new Date('2026-07-01T10:00:00.000Z'),
+        result: 'accepted',
+        payoutUsd: 12_000,
+        notes: 'First payout on record.',
+        signalSnapshot: {
+          audit_gap: { value: 0.2, confidence: 0.7 },
+          freshness: { value: 0.1, confidence: 0.9 },
+        },
+      },
+      {
+        id: 'e2e-outcome-2',
+        scopeId: SEED.measuredScopeId,
+        action: 'submit',
+        submittedAt: new Date('2026-07-06T10:00:00.000Z'),
+        result: 'duplicate',
+        payoutUsd: 5_000,
+        notes: null,
+        signalSnapshot: {
+          audit_gap: { value: 0.3, confidence: 0.5 },
+        },
+      },
+      {
+        id: 'e2e-outcome-3',
+        scopeId: SEED.measuredScopeId,
+        action: 'scan',
+        submittedAt: new Date('2026-07-11T10:00:00.000Z'),
+        result: 'accepted',
+        payoutUsd: 28_000,
+        notes: 'Escalated after triage.',
+        signalSnapshot: {
+          audit_gap: { value: 0.45, confidence: 0.65 },
+          freshness: { value: 0.3, confidence: 0.9 },
+        },
+      },
+      {
+        id: 'e2e-outcome-4',
+        scopeId: SEED.measuredScopeId,
+        action: 'submit',
+        submittedAt: new Date('2026-07-16T10:00:00.000Z'),
+        result: 'accepted',
+        payoutUsd: 41_000,
+        notes: null,
+        signalSnapshot: {
+          audit_gap: { value: 0.6, confidence: 0.8 },
+        },
+      },
+      {
+        id: 'e2e-outcome-5',
+        scopeId: SEED.measuredScopeId,
+        action: 'submit',
+        submittedAt: new Date('2026-07-21T10:00:00.000Z'),
+        result: 'accepted',
+        payoutUsd: 63_000,
+        notes: 'Largest payout to date.',
+        signalSnapshot: {
+          audit_gap: { value: 0.85, confidence: 0.9 },
+          freshness: { value: 0.6, confidence: 0.9 },
+        },
+      },
+    ],
+  });
+}
