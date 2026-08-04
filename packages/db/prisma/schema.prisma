@@ -51,6 +51,7 @@ model Scope {
   pathGlobs String[]
   chain     String?
   address   String?
+  dispatches ScanDispatch[]
   signals   Signal[]
   scores    Score[]
   outcomes  Outcome[]
@@ -183,4 +184,26 @@ model Outcome {
 
   @@index([scopeId, submittedAt])
   @@index([result, submittedAt])
+}
+
+/// One scan handed to Open-Kritt. The unique key on repo plus commit is the
+/// cost control: a daily run only dispatches code that actually moved.
+model ScanDispatch {
+  id         String    @id @default(cuid())
+  scope      Scope     @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  scopeId    String
+  repoKey    String
+  commitSha  String
+  /// Kritt's scan id, absent until the API accepts the request.
+  krittScanId String?
+  status     String    @default("pending")
+  score      Float
+  error      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  finishedAt DateTime?
+
+  @@unique([repoKey, commitSha])
+  @@index([status, createdAt])
+  @@index([scopeId])
 }

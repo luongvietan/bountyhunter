@@ -20,7 +20,8 @@
     "collect": "pnpm --filter @kritt-radar/worker run cli collect",
     "materialize": "pnpm --filter @kritt-radar/worker run cli materialize",
     "rank": "pnpm --filter @kritt-radar/worker run cli rank",
-    "test:e2e": "pnpm --filter @kritt-radar/web run test:e2e"
+    "test:e2e": "pnpm --filter @kritt-radar/web run test:e2e",
+    "dispatch": "pnpm --filter @kritt-radar/worker run cli dispatch"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
