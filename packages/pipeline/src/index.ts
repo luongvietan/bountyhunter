@@ -1,3 +1,4 @@
+export * from './manual-programs.js';
 export * from './resolver.js';
 export * from './entity-foundation.js';
 export * from './run.js';

@@ -1,0 +1,259 @@
+# Immunefi programs whose mirror assets are mostly contract addresses.
+# Repo lists are curated from Immunefi metadata plus GitHub org inventories.
+
+gmx:
+  platform: immunefi
+  externalId: gmx
+  title: "GMX"
+  url: https://immunefi.com/bounty/gmx/
+  poolUsd: 5000000
+  repos:
+    - github.com/gmx-io/ethers-kms-signer
+    - github.com/gmx-io/gmx-assets
+    - github.com/gmx-io/gmx-automation
+    - github.com/gmx-io/gmx-contracts
+    - github.com/gmx-io/gmx-synthetics
+    - github.com/gmx-io/gmx-token-lz
+    - github.com/gmx-io/layer-zero
+    - github.com/gmx-io/protocol-info
+
+beefyfinance:
+  platform: immunefi
+  externalId: beefyfinance
+  title: "Beefy Finance"
+  url: https://immunefi.com/bounty/beefyfinance/
+  poolUsd: 75000
+  repos:
+    - github.com/beefyfinance/address-book
+    - github.com/beefyfinance/beefy-api
+    - github.com/beefyfinance/beefy-audits
+    - github.com/beefyfinance/beefy-clm-api
+    - github.com/beefyfinance/beefy-contracts
+    - github.com/beefyfinance/beefy-cowllector
+    - github.com/beefyfinance/beefy-cowllector-v2
+    - github.com/beefyfinance/beefy-docs
+    - github.com/beefyfinance/beefy-docs-new
+    - github.com/beefyfinance/beefy-gov
+    - github.com/beefyfinance/beefy-omnipool
+    - github.com/beefyfinance/beefy-protocol
+    - github.com/beefyfinance/beefy-snap
+    - github.com/beefyfinance/beefy-sonic
+    - github.com/beefyfinance/beefy-v2
+    - github.com/beefyfinance/beefy-vote
+    - github.com/beefyfinance/beefy-zk
+    - github.com/beefyfinance/staking
+
+hyperlane:
+  platform: immunefi
+  externalId: hyperlane
+  title: "Hyperlane"
+  url: https://immunefi.com/bounty/hyperlane/
+  poolUsd: 2500000
+  repos:
+    - github.com/hyperlane-xyz/core
+    - github.com/hyperlane-xyz/cosmwasm
+    - github.com/hyperlane-xyz/fuel-contracts
+    - github.com/hyperlane-xyz/hyperlane-app-template
+    - github.com/hyperlane-xyz/hyperlane-controller
+    - github.com/hyperlane-xyz/hyperlane-deploy
+    - github.com/hyperlane-xyz/hyperlane-explorer
+    - github.com/hyperlane-xyz/hyperlane-infra
+    - github.com/hyperlane-xyz/hyperlane-monorepo
+    - github.com/hyperlane-xyz/hyperlane-package
+    - github.com/hyperlane-xyz/hyperlane-registry
+    - github.com/hyperlane-xyz/hyperlane-token
+    - github.com/hyperlane-xyz/hyperlane-token-fuel
+    - github.com/hyperlane-xyz/hyperlane-warp-ui-template
+    - github.com/hyperlane-xyz/hyperlane-widgets
+    - github.com/hyperlane-xyz/solana
+    - github.com/hyperlane-xyz/solidity
+    - github.com/hyperlane-xyz/superchain-xerc20
+    - github.com/hyperlane-xyz/tron-solidity
+    - github.com/hyperlane-xyz/xERC20
+
+parallel:
+  platform: immunefi
+  externalId: parallel
+  title: "Parallel"
+  url: https://immunefi.com/bounty/parallel/
+  poolUsd: 250000
+  repos:
+    - github.com/parallel-protocol/bridging-module
+    - github.com/parallel-protocol/curve-assets
+    - github.com/parallel-protocol/customized-token-list
+    - github.com/parallel-protocol/dimension-adapters
+    - github.com/parallel-protocol/euler-interfaces
+    - github.com/parallel-protocol/hyperchonk-tokenlists
+    - github.com/parallel-protocol/layerzero-wire
+    - github.com/parallel-protocol/parallel-core
+    - github.com/parallel-protocol/parallel-docs
+    - github.com/parallel-protocol/parallel-parallelizer
+    - github.com/parallel-protocol/parallel-prl
+    - github.com/parallel-protocol/parallel-tokenomics
+    - github.com/parallel-protocol/parallel-tokens
+    - github.com/parallel-protocol/smoldapp-tokenAssets
+    - github.com/parallel-protocol/tokenlists
+
+metronome:
+  platform: immunefi
+  externalId: metronome
+  title: "Metronome"
+  url: https://immunefi.com/bounty/metronome/
+  poolUsd: 50000
+  repos:
+    - github.com/autonomoussoftware/metronome
+    - github.com/autonomoussoftware/metronome-contracts-js
+    - github.com/autonomoussoftware/metronome-synth-audit
+    - github.com/autonomoussoftware/metronome-synth-public
+    - github.com/autonomoussoftware/metronome-wallet-core
+
+debridge:
+  platform: immunefi
+  externalId: debridge
+  title: "deBridge"
+  url: https://immunefi.com/bounty/debridge/
+  poolUsd: 200000
+  repos:
+    - github.com/debridge-finance/anchor
+    - github.com/debridge-finance/debridge-contracts-obsolete
+    - github.com/debridge-finance/debridge-contracts-v1
+    - github.com/debridge-finance/debridge-cross-chain-dapp-example
+    - github.com/debridge-finance/debridge-external-call
+    - github.com/debridge-finance/debridge-node
+    - github.com/debridge-finance/debridge-security
+    - github.com/debridge-finance/debridge-solana-sdk
+    - github.com/debridge-finance/debridge-twap-oracle
+    - github.com/debridge-finance/debridge-validator-signatures-sdk
+    - github.com/debridge-finance/desdk
+    - github.com/debridge-finance/dln-contracts
+    - github.com/debridge-finance/dln-taker
+    - github.com/debridge-finance/hardhat-debridge
+    - github.com/debridge-finance/multibridge
+
+ondofinance:
+  platform: immunefi
+  externalId: ondofinance
+  title: "Ondo Finance"
+  url: https://immunefi.com/bounty/ondofinance/
+  poolUsd: 1000000
+  repos:
+    - github.com/ondoprotocol/global-markets-solana
+    - github.com/ondoprotocol/ondo-v1
+    - github.com/ondoprotocol/usdy
+    - github.com/ondoprotocol/usdy-aptos
+    - github.com/ondoprotocol/usdy-noble
+
+enzymefinance:
+  platform: immunefi
+  externalId: enzymefinance
+  title: "Enzyme Blue"
+  url: https://immunefi.com/bounty/enzymefinance/
+  poolUsd: 200000
+  repos:
+    - github.com/enzymefinance/melon
+    - github.com/enzymefinance/mfp
+    - github.com/enzymefinance/protocol
+    - github.com/enzymefinance/protocol-onyx
+    - github.com/enzymefinance/security
+    - github.com/enzymefinance/spec
+    - github.com/enzymefinance/substreams
+
+compoundfinance:
+  platform: immunefi
+  externalId: compoundfinance
+  title: "Compound Finance"
+  url: https://immunefi.com/bounty/compoundfinance/
+  poolUsd: 1000000
+  repos:
+    - github.com/compound-finance/QuickBorrow
+    - github.com/compound-finance/abi
+    - github.com/compound-finance/autonomous-proposals
+    - github.com/compound-finance/cip-pm
+    - github.com/compound-finance/circlex
+    - github.com/compound-finance/comet
+    - github.com/compound-finance/comet-extension
+    - github.com/compound-finance/comet-extension-template
+    - github.com/compound-finance/comet-migrator
+    - github.com/compound-finance/comet-wrapper
+    - github.com/compound-finance/comp.vote
+    - github.com/compound-finance/comp.vote-1
+    - github.com/compound-finance/compound-components
+    - github.com/compound-finance/compound-config
+    - github.com/compound-finance/compound-eureka
+    - github.com/compound-finance/compound-finance.github.io
+    - github.com/compound-finance/compound-governance
+    - github.com/compound-finance/compound-js
+    - github.com/compound-finance/compound-money-market
+    - github.com/compound-finance/compound-protocol
+    - github.com/compound-finance/compound-protocol-lite
+    - github.com/compound-finance/compound-styles
+    - github.com/compound-finance/compound-v2-subgraph
+    - github.com/compound-finance/encumber-factory
+    - github.com/compound-finance/encumber_samples
+    - github.com/compound-finance/foundry
+    - github.com/compound-finance/gateway
+    - github.com/compound-finance/hardhat-cover
+    - github.com/compound-finance/open-oracle
+    - github.com/compound-finance/palisade
+    - github.com/compound-finance/quark
+    - github.com/compound-finance/quark-scripts
+    - github.com/compound-finance/quest
+    - github.com/compound-finance/saddle
+    - github.com/compound-finance/sleuth
+    - github.com/compound-finance/solidity-coverage
+    - github.com/compound-finance/solidity-parser-antlr
+    - github.com/compound-finance/token-list
+    - github.com/compound-finance/tokens
+    - github.com/compound-finance/webb3-backend-api
+    - github.com/compound-finance/webb3-frontend
+
+sparklend:
+  platform: immunefi
+  externalId: sparklend
+  title: "Spark"
+  url: https://immunefi.com/bounty/sparklend/
+  poolUsd: 5000000
+  repos:
+    - github.com/marsfoundation/aave-v3-core
+    - github.com/marsfoundation/spark-alm-controller
+    - github.com/marsfoundation/spark-app
+    - github.com/marsfoundation/spark-dev-docs
+    - github.com/marsfoundation/spark-docs
+    - github.com/marsfoundation/spark-gov-relay
+    - github.com/marsfoundation/spark-psm
+    - github.com/marsfoundation/sparklend
+    - github.com/marsfoundation/xchain-ssr-oracle
+    - github.com/sparkdotfi/aave-v3-core
+    - github.com/sparkdotfi/aave-v3-periphery
+    - github.com/sparkdotfi/automation
+    - github.com/sparkdotfi/dss
+    - github.com/sparkdotfi/dss-vest
+    - github.com/sparkdotfi/endgame-testnet-setup
+    - github.com/sparkdotfi/spark-address-registry
+    - github.com/sparkdotfi/spark-alm-controller
+    - github.com/sparkdotfi/spark-alm-rate-limits
+    - github.com/sparkdotfi/spark-app
+    - github.com/sparkdotfi/spark-audits
+    - github.com/sparkdotfi/spark-automations
+    - github.com/sparkdotfi/spark-gov-relay
+    - github.com/sparkdotfi/spark-interface
+    - github.com/sparkdotfi/spark-psm
+    - github.com/sparkdotfi/spark-rewards
+    - github.com/sparkdotfi/spark-savings-intents
+    - github.com/sparkdotfi/spark-spells
+    - github.com/sparkdotfi/spark-vaults
+    - github.com/sparkdotfi/spark-vaults-v2
+    - github.com/sparkdotfi/sparklend
+    - github.com/sparkdotfi/sparklend-advanced
+    - github.com/sparkdotfi/sparklend-cap-automator
+    - github.com/sparkdotfi/sparklend-conduits
+    - github.com/sparkdotfi/sparklend-deployments
+    - github.com/sparkdotfi/sparklend-freezer
+    - github.com/sparkdotfi/sparklend-health-checker
+    - github.com/sparkdotfi/sparklend-kill-switch
+    - github.com/sparkdotfi/sparklend-testing
+    - github.com/sparkdotfi/sparklend-v1-core
+    - github.com/sparkdotfi/spk-oft-deployment
+    - github.com/sparkdotfi/spk-staking-tests
+    - github.com/sparkdotfi/upgradeable-proxy
+    - github.com/sparkdotfi/vault-deployment

@@ -87,8 +87,16 @@ async function collectCatalog(): Promise<CollectorRunResult[]> {
 
 async function materializeCatalog(): Promise<void> {
   const aliasesYaml = await readFile(resolve(ROOT, 'config/aliases.yml'), 'utf8');
+  const manualProgramsYaml = await readFile(resolve(ROOT, 'config/manual-programs.yml'), 'utf8').catch(
+    () => '',
+  );
   const droppedNoRepo = await countDroppedContestPrograms(prisma);
-  const result = await materializeCatalogFoundation(prisma, aliasesYaml, new Date());
+  const result = await materializeCatalogFoundation(
+    prisma,
+    aliasesYaml,
+    new Date(),
+    manualProgramsYaml,
+  );
   console.log(
     `[catalog] foundation: ${result.programs} programs / ${result.scopes} scopes / ` +
       `${result.entities} entities / ${result.reports} firm-reports / ` +

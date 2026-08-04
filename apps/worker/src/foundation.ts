@@ -13,6 +13,8 @@ import {
   toImmunefiRecords,
   toProgramRecords,
   toSherlockRecords,
+  parseManualPrograms,
+  mergeManualImmunefiPrograms,
   type ProgramAuditRecord,
   type ProgramFields,
 } from '@kritt-radar/pipeline';
@@ -457,6 +459,7 @@ export async function materializeCatalogFoundation(
   prisma: PrismaClient,
   aliasesYaml: string,
   now: Date,
+  manualProgramsYaml = '',
 ): Promise<FoundationResult> {
   const aliases = parseAliases(aliasesYaml);
   const contest = await loadContestPrograms(prisma);
@@ -465,7 +468,11 @@ export async function materializeCatalogFoundation(
     where: { collectorId: 'immunefi-programs' },
     select: { sourceUrl: true, fetchedAt: true, payload: true },
   });
-  const immunefiPrograms = toImmunefiRecords(latestBySourceUrl(immunefiRows)).map(
+  const immunefiRecords = mergeManualImmunefiPrograms(
+    toImmunefiRecords(latestBySourceUrl(immunefiRows)),
+    manualProgramsYaml.trim() ? parseManualPrograms(manualProgramsYaml) : [],
+  );
+  const immunefiPrograms = immunefiRecords.map(
     (record): ProgramInput => ({
       program: record.program,
       scopes: record.scopes,
