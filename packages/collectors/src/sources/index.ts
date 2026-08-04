@@ -1,5 +1,12 @@
 export { c4Contests, parseC4Contests, parsePoolUsd, type ProgramPayload } from './c4-contests.js';
-export { sherlockContests, parseSherlockContests } from './sherlock-contests.js';
+export {
+  sherlockContests,
+  parseSherlockContests,
+  buildSherlockPayload,
+  parseSherlockScopes,
+  type SherlockProgramPayload,
+  type SherlockScopeEntry,
+} from './sherlock-contests.js';
 export { cantinaCompetitions, parseCantinaCompetitions } from './cantina-competitions.js';
 export {
   makeGithubRepoActivity,

@@ -11,8 +11,13 @@ export const SEED = {
   canonicalEntityId: 'e2e-entity-canonical',
   emptyProvisionalEntityId: 'e2e-entity-provisional-empty',
   otherCanonicalEntityId: 'e2e-entity-canonical-other',
+  measuredScopeId: 'e2e-scope',
+  assumedScopeId: 'e2e-scope-other',
+  sherlockScopeId: 'e2e-scope-sherlock',
   auditHint: 'zephyr-perps-security-review',
   repoKey: 'github.com/zephyr-fi/perps-core',
+  sherlockRepoKey: 'github.com/acme/vault',
+  headCommit: 'abc123def4567890',
   createdAt: new Date('2026-08-01T09:00:00.000Z'),
   auditPublishedAt: new Date('2026-03-14T00:00:00.000Z'),
 } as const;
@@ -60,11 +65,12 @@ export async function seedMergeQueue(prisma: PrismaClient): Promise<void> {
           publishedAt: SEED.createdAt,
           scopes: {
             create: {
-              id: 'e2e-scope',
+              id: SEED.measuredScopeId,
               kind: 'repo',
               hardKey: SEED.repoKey,
               repoUrl: SEED.repoKey,
               pathGlobs: [],
+              commitish: SEED.headCommit,
             },
           },
         },
@@ -99,7 +105,7 @@ export async function seedMergeQueue(prisma: PrismaClient): Promise<void> {
           publishedAt: SEED.createdAt,
           scopes: {
             create: {
-              id: 'e2e-scope-other',
+              id: SEED.assumedScopeId,
               kind: 'repo',
               hardKey: 'github.com/orbit-fi/lending',
               repoUrl: 'github.com/orbit-fi/lending',
@@ -133,5 +139,102 @@ export async function seedMergeQueue(prisma: PrismaClient): Promise<void> {
       reason: { tokenJaccard: 0.75, editSimilarity: 0.57 },
       createdAt: SEED.createdAt,
     },
+  });
+}
+
+/**
+ * Targets need measured and assumed audit gaps on distinct platforms so the
+ * ranking page can prove ordering, filters, and the Open-Kritt handoff.
+ */
+export async function seedTargets(prisma: PrismaClient): Promise<void> {
+  await prisma.entity.create({
+    data: {
+      id: 'e2e-entity-sherlock',
+      slug: 'repo-github-com-acme-vault',
+      canonicalName: 'acme/vault',
+      createdAt: SEED.createdAt,
+      programs: {
+        create: {
+          id: 'e2e-program-sherlock',
+          platform: 'sherlock',
+          externalId: '42',
+          title: 'Acme Vault',
+          url: 'https://audits.sherlock.xyz/contests/42',
+          kind: 'contest',
+          publishedAt: SEED.createdAt,
+          endsAt: new Date('2026-09-01T00:00:00.000Z'),
+          scopes: {
+            create: {
+              id: SEED.sherlockScopeId,
+              kind: 'repo',
+              hardKey: SEED.sherlockRepoKey,
+              repoUrl: SEED.sherlockRepoKey,
+              pathGlobs: [],
+              commitish: 'deadbeef1234567890',
+            },
+          },
+        },
+      },
+    },
+  });
+
+  await prisma.signal.createMany({
+    data: [
+      {
+        scopeId: SEED.measuredScopeId,
+        type: 'audit_gap',
+        value: 0.85,
+        confidence: 0.7,
+        evidence: {
+          sinceDate: SEED.auditPublishedAt.toISOString(),
+          files: ['src/Pool.sol', 'src/Router.sol', 'README.md'],
+          changedLoc: 420,
+          totalLoc: 1000,
+        },
+        observationIds: [],
+        computedAt: SEED.createdAt,
+      },
+      {
+        scopeId: SEED.measuredScopeId,
+        type: 'freshness',
+        value: 0.4,
+        confidence: 1,
+        evidence: {},
+        observationIds: [],
+        computedAt: SEED.createdAt,
+      },
+      {
+        scopeId: SEED.assumedScopeId,
+        type: 'audit_gap',
+        value: 1,
+        confidence: 0.25,
+        evidence: { reason: 'no_public_audit' },
+        observationIds: [],
+        computedAt: SEED.createdAt,
+      },
+      {
+        scopeId: SEED.sherlockScopeId,
+        type: 'audit_gap',
+        value: 0.55,
+        confidence: 0.7,
+        evidence: {
+          sinceDate: '2026-01-01T00:00:00.000Z',
+          files: ['contracts/Vault.sol'],
+          changedLoc: 200,
+          totalLoc: 800,
+        },
+        observationIds: [],
+        computedAt: SEED.createdAt,
+      },
+      {
+        scopeId: SEED.sherlockScopeId,
+        type: 'freshness',
+        value: 0.2,
+        confidence: 1,
+        evidence: {},
+        observationIds: [],
+        computedAt: SEED.createdAt,
+      },
+    ],
   });
 }

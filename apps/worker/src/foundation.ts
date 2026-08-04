@@ -12,11 +12,12 @@ import {
   toAuditReportRecords,
   toImmunefiRecords,
   toProgramRecords,
+  toSherlockRecords,
   type ProgramAuditRecord,
   type ProgramFields,
 } from '@kritt-radar/pipeline';
 
-const CONTEST_COLLECTORS = ['c4-contests', 'sherlock-contests', 'cantina-competitions'];
+const CONTEST_COLLECTORS = ['c4-contests', 'cantina-competitions'];
 const CANDIDATE_THRESHOLD = 0.65;
 
 type Transaction = Prisma.TransactionClient;
@@ -119,6 +120,20 @@ async function loadContestPrograms(
 
 export async function countDroppedContestPrograms(prisma: PrismaClient): Promise<number> {
   return (await loadContestPrograms(prisma)).droppedNoRepo;
+}
+
+async function loadSherlockPrograms(prisma: PrismaClient): Promise<ProgramInput[]> {
+  const rows = await prisma.observation.findMany({
+    where: { collectorId: 'sherlock-contests' },
+    select: { sourceUrl: true, fetchedAt: true, payload: true },
+  });
+  return toSherlockRecords(latestBySourceUrl(rows)).map(
+    (record): ProgramInput => ({
+      program: record.program,
+      scopes: record.scopes.map((scope) => ({ ...scope, addedAt: record.changedAt })),
+      audits: record.audits,
+    }),
+  );
 }
 
 function platformNameKey(platform: string, title: string): string {
@@ -289,15 +304,19 @@ async function upsertProgramAudits(
         entityId,
         firm: audit.firm,
         publishedAt: audit.publishedAt,
-        projectHint: input.program.externalId,
+        projectHint: audit.projectHint ?? input.program.externalId,
         reportUrl: audit.reportUrl,
+        coveredCommit: audit.coveredCommit,
+        coveredPaths: audit.coveredPaths,
         observationIds: [],
       },
       update: {
         entityId,
         firm: audit.firm,
         publishedAt: audit.publishedAt,
-        projectHint: input.program.externalId,
+        projectHint: audit.projectHint ?? input.program.externalId,
+        coveredCommit: audit.coveredCommit,
+        coveredPaths: audit.coveredPaths,
       },
     });
   }
@@ -441,6 +460,7 @@ export async function materializeCatalogFoundation(
 ): Promise<FoundationResult> {
   const aliases = parseAliases(aliasesYaml);
   const contest = await loadContestPrograms(prisma);
+  const sherlockPrograms = await loadSherlockPrograms(prisma);
   const immunefiRows = await prisma.observation.findMany({
     where: { collectorId: 'immunefi-programs' },
     select: { sourceUrl: true, fetchedAt: true, payload: true },
@@ -456,7 +476,7 @@ export async function materializeCatalogFoundation(
   const catalog = await materializeCatalog(
     prisma,
     aliases,
-    [...contest.programs, ...immunefiPrograms],
+    [...contest.programs, ...sherlockPrograms, ...immunefiPrograms],
     now,
   );
   const audits = await materializeAudits(prisma, now);

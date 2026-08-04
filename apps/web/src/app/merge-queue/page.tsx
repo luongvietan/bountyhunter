@@ -1,4 +1,5 @@
 import { prisma } from '@kritt-radar/db';
+import { ConsoleNavbar } from '../../components/console-navbar';
 import { CandidateCard } from './candidate-card';
 import { isDatabaseSetupError } from './database-setup';
 import {
@@ -33,12 +34,7 @@ function formatSyncTime(value: string): string {
 function SetupState() {
   return (
     <main className="page-shell setup-shell" id="main-content">
-      <header className="masthead">
-        <div>
-          <p className="product-name">Kritt Radar</p>
-          <p className="console-label">Internal operator console</p>
-        </div>
-      </header>
+      <ConsoleNavbar activeSection="merge-queue" />
       <section className="setup-panel" aria-labelledby="setup-title">
         <span className="setup-index" aria-hidden="true">DB</span>
         <div>
@@ -81,20 +77,19 @@ function EmptyQueue({ page }: { page: MergeQueuePage }) {
 function QueueScreen({ page, syncedAt }: { page: MergeQueuePage; syncedAt: string | null }) {
   return (
     <main className="page-shell" id="main-content">
-      <header className="masthead">
-        <div>
-          <p className="product-name">Kritt Radar</p>
-          <p className="console-label">Internal operator console</p>
-        </div>
-        <dl className="status-summary" aria-label="Merge candidate totals">
-          {(Object.keys(tabLabels) as QueueStatus[]).map((status) => (
-            <div key={status}>
-              <dt>{tabLabels[status]}</dt>
-              <dd>{page.counts[status]}</dd>
-            </div>
-          ))}
-        </dl>
-      </header>
+      <ConsoleNavbar
+        activeSection="merge-queue"
+        trailing={
+          <dl className="status-summary" aria-label="Merge candidate totals">
+            {(Object.keys(tabLabels) as QueueStatus[]).map((status) => (
+              <div key={status}>
+                <dt>{tabLabels[status]}</dt>
+                <dd>{page.counts[status]}</dd>
+              </div>
+            ))}
+          </dl>
+        }
+      />
 
       <section className="route-heading" aria-labelledby="page-title">
         <div>

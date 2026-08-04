@@ -1,4 +1,4 @@
-import type { ImmunefiProgramPayload, ProgramPayload } from '@kritt-radar/collectors';
+import type { ImmunefiProgramPayload, ProgramPayload, SherlockProgramPayload } from '@kritt-radar/collectors';
 
 export interface ObservationRow {
   sourceUrl: string;
@@ -112,7 +112,7 @@ export interface ScopeRecord {
 }
 
 export interface ProgramAuditRecord {
-  /** Khoá duy nhất toàn cục do Immunefi cấp. */
+  /** Khoá duy nhất toàn cục do nền tảng cấp. */
   auditId: string;
   firm: string;
   publishedAt: Date;
@@ -123,6 +123,10 @@ export interface ProgramAuditRecord {
    * nhau, nên nó trùng và sẽ va vào ràng buộc unique của AuditReport.
    */
   reportUrl: string;
+  coveredCommit: string | null;
+  coveredPaths: string[];
+  /** Gợi ý khớp repo; mặc định là externalId của program khi materialize. */
+  projectHint?: string;
 }
 
 export interface MultiScopeRecord {
@@ -150,6 +154,8 @@ function toProgramAudits(payload: ImmunefiProgramPayload): ProgramAuditRecord[] 
       firm: audit.auditor?.trim() || 'unknown',
       publishedAt,
       reportUrl: `https://immunefi.com/bounty/${payload.externalId}/#audit-${audit.auditId}`,
+      coveredCommit: null,
+      coveredPaths: [],
     });
   }
   return [...byId.values()].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
@@ -212,6 +218,71 @@ export function toImmunefiRecords(rows: readonly LatestObservation[]): MultiScop
       },
       scopes: [...byRepo.values()],
       audits: toProgramAudits(p),
+      changedAt: row.changedAt,
+    });
+  }
+  return out;
+}
+
+function isSherlockPayload(v: unknown): v is SherlockProgramPayload {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    (v as SherlockProgramPayload).platform === 'sherlock' &&
+    Array.isArray((v as SherlockProgramPayload).scopes)
+  );
+}
+
+/**
+ * Contest Sherlock: mỗi repo trong scope có commit_hash chính xác làm coveredCommit.
+ */
+export function toSherlockRecords(rows: readonly LatestObservation[]): MultiScopeRecord[] {
+  const out: MultiScopeRecord[] = [];
+
+  for (const row of rows) {
+    if (!isSherlockPayload(row.payload)) continue;
+    const p = row.payload;
+    if (p.scopes.length === 0) continue;
+
+    const auditPublishedAt = toDate(p.endsAt) ?? toDate(p.startsAt);
+    if (!auditPublishedAt) continue;
+
+    const byRepo = new Map<string, ScopeRecord>();
+    const audits: ProgramAuditRecord[] = [];
+
+    for (const scope of p.scopes) {
+      byRepo.set(scope.repoKey, {
+        kind: 'repo',
+        hardKey: scope.repoKey,
+        repoUrl: scope.repoKey,
+        pathGlobs: scope.files,
+        addedAt: null,
+      });
+      audits.push({
+        auditId: `${p.externalId}:${scope.repoKey}`,
+        firm: 'Sherlock',
+        publishedAt: auditPublishedAt,
+        reportUrl: `https://audits.sherlock.xyz/contests/${p.externalId}#repo/${encodeURIComponent(scope.repoKey)}`,
+        coveredCommit: scope.commitHash,
+        coveredPaths: scope.files,
+        projectHint: scope.repoKey,
+      });
+    }
+
+    out.push({
+      program: {
+        platform: p.platform,
+        externalId: p.externalId,
+        title: p.title,
+        url: p.url,
+        poolUsd: p.poolUsd,
+        kind: p.kind,
+        publishedAt: toDate(p.publishedAt),
+        startsAt: toDate(p.startsAt),
+        endsAt: toDate(p.endsAt),
+      },
+      scopes: [...byRepo.values()],
+      audits,
       changedAt: row.changedAt,
     });
   }

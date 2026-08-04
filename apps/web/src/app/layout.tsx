@@ -14,7 +14,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body>
         <a className="skip-link" href="#main-content">
-          Skip to merge queue
+          Skip to main content
         </a>
         {children}
       </body>

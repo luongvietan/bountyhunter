@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toProgramRecords, latestBySourceUrl, toImmunefiRecords } from '../src/materialize.js';
+import { toProgramRecords, latestBySourceUrl, toImmunefiRecords, toSherlockRecords } from '../src/materialize.js';
 
 const obs = [
   {
@@ -247,5 +247,78 @@ describe('toImmunefiRecords — cầu nối audit', () => {
     ])[0]!.audits;
     expect(audits).toHaveLength(1);
     expect(audits[0]!.firm).toBe('unknown');
+  });
+});
+
+describe('toSherlockRecords', () => {
+  const sherlockRow = {
+    sourceUrl: 'https://audits.sherlock.xyz/contests/333',
+    changedAt: new Date('2026-08-03T00:00:00Z'),
+    payload: {
+      platform: 'sherlock',
+      externalId: '333',
+      title: 'MakerDAO Endgame',
+      url: 'https://audits.sherlock.xyz/contests/333',
+      poolUsd: 200000,
+      kind: 'contest',
+      publishedAt: '2023-03-28T00:00:00.000Z',
+      startsAt: '2023-03-28T00:00:00.000Z',
+      endsAt: '2023-05-25T00:00:00.000Z',
+      repoUrl: 'github.com/makerdao/dss-flappers',
+      sponsor: null,
+      scopes: [
+        {
+          repoKey: 'github.com/makerdao/dss-flappers',
+          commitHash: 'b2e2ed17a1b2c3d4e5f6789012345678901234567',
+          files: ['src/Flapper.sol'],
+        },
+        {
+          repoKey: 'github.com/makerdao/endgame-toolkit',
+          commitHash: '70b59deb1234567890abcdef1234567890abcdef',
+          files: ['src/Toolkit.sol', 'src/Extra.sol'],
+        },
+      ],
+    },
+  };
+
+  it('sinh multi-scope với pathGlobs và audit per repo có coveredCommit', () => {
+    const records = toSherlockRecords([sherlockRow]);
+    expect(records).toHaveLength(1);
+    const record = records[0]!;
+    expect(record.scopes).toHaveLength(2);
+    expect(record.scopes[0]).toMatchObject({
+      hardKey: 'github.com/makerdao/dss-flappers',
+      pathGlobs: ['src/Flapper.sol'],
+    });
+    expect(record.audits).toHaveLength(2);
+    expect(record.audits[0]).toMatchObject({
+      firm: 'Sherlock',
+      coveredCommit: 'b2e2ed17a1b2c3d4e5f6789012345678901234567',
+      coveredPaths: ['src/Flapper.sol'],
+      projectHint: 'github.com/makerdao/dss-flappers',
+    });
+    expect(record.audits[0]!.reportUrl).toContain('#repo/');
+  });
+
+  it('bỏ payload không có scopes', () => {
+    expect(
+      toSherlockRecords([
+        {
+          ...sherlockRow,
+          payload: { ...sherlockRow.payload, scopes: [] },
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('bỏ payload không parse được mốc audit', () => {
+    expect(
+      toSherlockRecords([
+        {
+          ...sherlockRow,
+          payload: { ...sherlockRow.payload, endsAt: null, startsAt: null },
+        },
+      ]),
+    ).toEqual([]);
   });
 });

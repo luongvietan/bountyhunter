@@ -1,6 +1,6 @@
 import type { RepoSnapshotPayload, RepoTarget } from '@kritt-radar/collectors';
 import { describe, expect, it } from 'vitest';
-import { snapshotToAuditGap } from '../src/repo-signals.js';
+import { snapshotToAuditGap, pickAuditReportForRepo } from '../src/repo-signals.js';
 
 const target: RepoTarget = {
   repoKey: 'github.com/acme/protocol',
@@ -23,6 +23,7 @@ const completeAudited: RepoSnapshotPayload = {
     { path: 'docs/architecture.md', changedLoc: 999 },
   ],
   commits: ['change001', 'change002'],
+  auditPredatesRepo: false,
   complete: true,
   truncated: false,
   error: null,
@@ -194,11 +195,58 @@ describe('snapshotToAuditGap', () => {
       },
       expected: { ...target, coveredCommit: null },
     },
+    {
+      name: 'auditPredatesRepo without an audit date',
+      snapshot: {
+        ...completeAudited,
+        auditPredatesRepo: true,
+        cutoff: { lastAuditAt: null, baseCommit: null },
+      },
+      expected: { ...target, lastAuditAt: null, coveredCommit: null },
+    },
+    {
+      name: 'auditPredatesRepo with a base commit still present',
+      snapshot: {
+        ...completeAudited,
+        auditPredatesRepo: true,
+      },
+      expected: target,
+    },
   ])('rejects an impossible $name', ({ snapshot, expected }) => {
     const signal = snapshotToAuditGap(snapshot, expected);
 
     expect(signal.confidence).toBe(0);
     expect(signal.evidence.reason).toBe('invalid_snapshot');
+  });
+
+  it('scores a post-audit repository as a full measured gap without inventing a failure reason', () => {
+    const datedTarget: RepoTarget = { ...target, coveredCommit: null };
+    const postAudit: RepoSnapshotPayload = {
+      ...completeAudited,
+      cutoff: { lastAuditAt: target.lastAuditAt, baseCommit: null },
+      changedFiles: [],
+      commits: [],
+      auditPredatesRepo: true,
+    };
+
+    const signal = snapshotToAuditGap(postAudit, datedTarget);
+
+    expect(signal.value).toBe(1);
+    expect(signal.confidence).toBe(0.7);
+    expect(signal.evidence).toEqual({
+      headSha: 'abc123',
+      sinceCommit: null,
+      sinceDate: '2026-07-01T00:00:00.000Z',
+      files: ['src/Pool.sol', 'src/Router.sol'],
+      commits: ['abc123'],
+      changedLoc: 1000,
+      totalLoc: 1000,
+      locMethod: 'estimated_from_bytes',
+      complete: true,
+      truncated: false,
+      auditPredatesRepo: true,
+    });
+    expect(signal.evidence.reason).toBeUndefined();
   });
 
   it('caps truncated estimated data confidence at 0.35', () => {
@@ -237,5 +285,56 @@ describe('snapshotToAuditGap', () => {
 
     expect(signal.confidence).toBe(0);
     expect(signal.evidence.reason).toBe('stale_cutoff');
+  });
+});
+
+describe('pickAuditReportForRepo', () => {
+  const publishedAt = new Date('2023-05-25T00:00:00.000Z');
+
+  it('khớp theo projectHint khi entity có nhiều report Sherlock', () => {
+    const reports = [
+      {
+        publishedAt,
+        coveredCommit: 'aaa',
+        observationIds: [],
+        projectHint: 'github.com/makerdao/dss-flappers',
+        reportUrl: 'https://audits.sherlock.xyz/contests/333#repo/github.com%2Fmakerdao%2Fdss-flappers',
+      },
+      {
+        publishedAt,
+        coveredCommit: 'bbb',
+        observationIds: [],
+        projectHint: 'github.com/makerdao/endgame-toolkit',
+        reportUrl: 'https://audits.sherlock.xyz/contests/333#repo/github.com%2Fmakerdao%2Fendgame-toolkit',
+      },
+    ];
+
+    expect(pickAuditReportForRepo(reports, 'github.com/makerdao/endgame-toolkit')).toMatchObject({
+      coveredCommit: 'bbb',
+    });
+  });
+
+  it('fallback về report mới nhất khi không khớp repo', () => {
+    const older = new Date('2022-01-01T00:00:00.000Z');
+    const reports = [
+      {
+        publishedAt,
+        coveredCommit: 'newest',
+        observationIds: [],
+        projectHint: 'hedera',
+        reportUrl: 'https://immunefi.com/bounty/hedera/#audit-1',
+      },
+      {
+        publishedAt: older,
+        coveredCommit: 'older',
+        observationIds: [],
+        projectHint: 'hedera',
+        reportUrl: 'https://immunefi.com/bounty/hedera/#audit-2',
+      },
+    ];
+
+    expect(pickAuditReportForRepo(reports, 'github.com/unknown/repo')).toMatchObject({
+      coveredCommit: 'newest',
+    });
   });
 });

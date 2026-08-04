@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { parseWeights } from '@kritt-radar/core';
 import { prisma } from '@kritt-radar/db';
 import { isDatabaseSetupError } from '../merge-queue/database-setup';
+import { ConsoleNavbar } from '../../components/console-navbar';
 import { listRankedTargets, type RankedTarget, type TargetRankingPage } from '../../lib/target-ranking';
 
 export const dynamic = 'force-dynamic';
@@ -107,6 +108,7 @@ function EmptyState({ page }: { page: TargetRankingPage }) {
 function SetupState() {
   return (
     <main className="page-shell setup-shell" id="main-content">
+      <ConsoleNavbar activeSection="targets" />
       <section className="setup-panel">
         <h1>Connect the evidence database</h1>
         <p>Target ranking is unavailable until PostgreSQL is running and the local data is prepared.</p>
@@ -131,18 +133,7 @@ export default async function TargetsRoute({ searchParams }: TargetsRouteProps) 
 
   return (
     <main className="page-shell" id="main-content">
-      <header className="masthead">
-        <div>
-          <p className="product-name">Kritt Radar</p>
-          <p className="console-label">Internal operator console</p>
-        </div>
-        <nav className="masthead-nav" aria-label="Console sections">
-          <Link href="/targets" aria-current="page">
-            Targets
-          </Link>
-          <Link href="/merge-queue">Merge queue</Link>
-        </nav>
-      </header>
+      <ConsoleNavbar activeSection="targets" />
 
       <section className="route-heading">
         <div>

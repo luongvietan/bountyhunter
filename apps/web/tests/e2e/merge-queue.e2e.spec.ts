@@ -88,7 +88,7 @@ test('keyboard reaches the status navigation from the top of the page', async ({
   await page.goto('/merge-queue');
 
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('link', { name: 'Skip to merge queue' })).toBeFocused();
+  await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
 
   await page.keyboard.press('Tab');
   const focusedIsVisible = await page.evaluate(() => {

@@ -149,6 +149,12 @@ summary:focus-visible {
   border-bottom: 1px solid var(--rule);
 }
 
+.masthead-end {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
 .product-name,
 .console-label,
 .route-heading p,
@@ -994,6 +1000,13 @@ summary:focus-visible {
 
   .masthead {
     gap: 16px;
+  }
+
+  .masthead-end {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
   }
 
   .status-summary {

@@ -77,7 +77,11 @@ const CompareResponse = z
     });
   });
 
-const BaseCommitResponse = z.array(z.object({ sha: z.string().min(1) })).min(1);
+/**
+ * May legitimately be empty: asking for the newest commit at or before the
+ * audit date returns nothing when the repository was created after the audit.
+ */
+const BaseCommitResponse = z.array(z.object({ sha: z.string().min(1) }));
 
 export interface RepoTarget {
   repoKey: string;
@@ -96,6 +100,11 @@ export interface RepoSnapshotPayload {
   locMethod: 'estimated_from_bytes';
   changedFiles: Array<{ path: string; changedLoc: number }>;
   commits: string[];
+  /**
+   * The audit predates the repository's first commit, so every file in it is
+   * unreviewed relative to that audit. Distinct from "no audit known".
+   */
+  auditPredatesRepo: boolean;
   complete: boolean;
   truncated: boolean;
   error: string | null;
@@ -229,6 +238,7 @@ export function makeGithubRepoSnapshots(
       for (const target of targets) {
         let baseCommit = target.coveredCommit;
         const sourceUrl = githubRepoSnapshotSourceKey(target);
+        let auditPredatesRepo = false;
         let head: ParsedHead | null = null;
         let tree: ParsedTree | null = null;
         let compare: ParsedCompare = { changedFiles: [], commits: [], truncated: false };
@@ -254,7 +264,8 @@ export function makeGithubRepoSnapshots(
                 options,
               ),
             );
-            baseCommit = baseResponse[0]!.sha;
+            baseCommit = baseResponse[0]?.sha ?? null;
+            auditPredatesRepo = baseCommit === null;
           }
 
           if (baseCommit) {
@@ -278,6 +289,7 @@ export function makeGithubRepoSnapshots(
             locMethod: 'estimated_from_bytes',
             changedFiles: compare.changedFiles,
             commits: compare.commits,
+            auditPredatesRepo,
             complete: !truncated,
             truncated,
             error: null,
@@ -299,6 +311,7 @@ export function makeGithubRepoSnapshots(
             locMethod: 'estimated_from_bytes',
             changedFiles: compare.changedFiles,
             commits: compare.commits,
+            auditPredatesRepo,
             complete: false,
             truncated,
             error,

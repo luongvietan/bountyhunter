@@ -45,6 +45,7 @@ const RepoSnapshotSchema = z.object({
     z.object({ path: NonEmptyString, changedLoc: z.number().finite().int().nonnegative() }),
   ),
   commits: z.array(NonEmptyString),
+  auditPredatesRepo: z.boolean().default(false),
   complete: z.boolean(),
   truncated: z.boolean(),
   error: z.string().nullable(),
@@ -63,6 +64,23 @@ const RepoSnapshotSchema = z.object({
       path: ['complete'],
       message: 'complete and truncated cannot both be true',
     });
+  }
+
+  if (snapshot.auditPredatesRepo) {
+    if (snapshot.cutoff.lastAuditAt === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['auditPredatesRepo'],
+        message: 'auditPredatesRepo requires an audit date',
+      });
+    }
+    if (snapshot.cutoff.baseCommit !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cutoff', 'baseCommit'],
+        message: 'auditPredatesRepo snapshots cannot carry a base commit',
+      });
+    }
   }
 
   if (snapshot.error !== null) {
@@ -90,7 +108,11 @@ const RepoSnapshotSchema = z.object({
       message: 'healthy snapshots must be complete or truncated',
     });
   }
-  if (snapshot.cutoff.lastAuditAt !== null && snapshot.cutoff.baseCommit === null) {
+  if (
+    snapshot.cutoff.lastAuditAt !== null &&
+    snapshot.cutoff.baseCommit === null &&
+    !snapshot.auditPredatesRepo
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['cutoff', 'baseCommit'],
@@ -120,13 +142,18 @@ function evidenceBase(
   useSnapshotChanges: boolean,
 ): Record<string, unknown> {
   const audited = expected.lastAuditAt !== null;
+  const wholeRepoUnaudited = snapshot.auditPredatesRepo;
   const files = useSnapshotChanges
     ? audited
-      ? snapshot.changedFiles.map((file) => file.path)
+      ? wholeRepoUnaudited
+        ? snapshot.files
+        : snapshot.changedFiles.map((file) => file.path)
       : snapshot.files
     : [];
   const changedLoc = useSnapshotChanges && audited
-    ? snapshot.changedFiles.reduce((total, file) => total + file.changedLoc, 0)
+    ? wholeRepoUnaudited
+      ? snapshot.totalLoc
+      : snapshot.changedFiles.reduce((total, file) => total + file.changedLoc, 0)
     : 0;
 
   return {
@@ -134,12 +161,19 @@ function evidenceBase(
     sinceCommit: snapshot.cutoff.baseCommit,
     sinceDate: snapshot.cutoff.lastAuditAt,
     files,
-    commits: useSnapshotChanges && audited ? snapshot.commits : [],
+    commits: useSnapshotChanges && audited
+      ? wholeRepoUnaudited
+        ? snapshot.headSha === null
+          ? []
+          : [snapshot.headSha]
+        : snapshot.commits
+      : [],
     changedLoc,
     totalLoc: snapshot.totalLoc,
     locMethod: snapshot.locMethod,
     complete: snapshot.complete,
     truncated: snapshot.truncated,
+    ...(wholeRepoUnaudited ? { auditPredatesRepo: true } : {}),
   };
 }
 
@@ -175,6 +209,21 @@ export function snapshotToAuditGap(
   }
 
   const lastAuditAt = expected.lastAuditAt === null ? null : new Date(expected.lastAuditAt);
+  // Audit older than the repo's first commit ⇒ every in-scope file is unreviewed.
+  // Attribute the whole estimated LOC to the first file so the log ratio is 1
+  // without inventing a fake compare response in the collector.
+  const wholeRepoChanges = snapshot.auditPredatesRepo
+    ? {
+        files: snapshot.files.map((path, index) => ({
+          path,
+          changedLoc: index === 0 ? snapshot.totalLoc : 0,
+        })),
+        commits: snapshot.headSha === null ? [] : [snapshot.headSha],
+      }
+    : {
+        files: snapshot.changedFiles,
+        commits: snapshot.commits,
+      };
   const calculated = extractAuditGap({
     commits: [],
     lastAuditAt,
@@ -182,14 +231,7 @@ export function snapshotToAuditGap(
     totalLoc: snapshot.totalLoc,
     hasCommitData: true,
     auditCoverage,
-    ...(lastAuditAt === null
-      ? {}
-      : {
-          changesSinceAudit: {
-            files: snapshot.changedFiles,
-            commits: snapshot.commits,
-          },
-        }),
+    ...(lastAuditAt === null ? {} : { changesSinceAudit: wholeRepoChanges }),
   });
   // Lấy min chứ không ghi đè: chất lượng snapshot và độ chắc chắn của chính
   // extractor là hai nguồn nghi ngờ độc lập, cái nào yếu hơn thì quyết định.
@@ -219,6 +261,35 @@ export function snapshotToAuditGap(
   };
 }
 
+type ScopeAuditReport = {
+  publishedAt: Date;
+  coveredCommit: string | null;
+  observationIds: string[];
+  projectHint: string;
+  reportUrl: string;
+};
+
+/**
+ * Chọn audit report khớp repo khi entity có nhiều report (Sherlock multi-repo).
+ * Ưu tiên projectHint hoặc reportUrl chứa repoKey khi có coveredCommit.
+ */
+export function pickAuditReportForRepo(
+  reports: readonly ScopeAuditReport[],
+  repoKey: string,
+): ScopeAuditReport | null {
+  if (reports.length === 0) return null;
+  const withCommit = reports.filter((report) => report.coveredCommit);
+  const byHint = withCommit.find((report) => report.projectHint === repoKey);
+  if (byHint) return byHint;
+  const encoded = encodeURIComponent(repoKey);
+  const shortKey = repoKey.replace(/^github\.com\//, '');
+  const byUrl = withCommit.find(
+    (report) => report.reportUrl.includes(encoded) || report.reportUrl.includes(shortKey),
+  );
+  if (byUrl) return byUrl;
+  return reports[0]!;
+}
+
 export async function listRepoTargets(prisma: PrismaClient): Promise<RepoTargetRecord[]> {
   const scopes = await prisma.scope.findMany({
     where: { kind: 'repo', hardKey: { not: null } },
@@ -233,11 +304,12 @@ export async function listRepoTargets(prisma: PrismaClient): Promise<RepoTargetR
             select: {
               auditReports: {
                 orderBy: [{ publishedAt: 'desc' }, { reportUrl: 'asc' }, { id: 'asc' }],
-                take: 1,
                 select: {
                   publishedAt: true,
                   coveredCommit: true,
                   observationIds: true,
+                  projectHint: true,
+                  reportUrl: true,
                 },
               },
             },
@@ -252,7 +324,8 @@ export async function listRepoTargets(prisma: PrismaClient): Promise<RepoTargetR
   for (const scope of scopes) {
     const repoKey = normalizeRepoUrl(scope.hardKey ?? scope.repoUrl ?? '');
     if (!repoKey?.startsWith('github.com/')) continue;
-    const report = scope.program.entity?.auditReports[0];
+    const reports = scope.program.entity?.auditReports ?? [];
+    const report = pickAuditReportForRepo(reports, repoKey);
     targets.push({
       scopeId: scope.id,
       repoKey,

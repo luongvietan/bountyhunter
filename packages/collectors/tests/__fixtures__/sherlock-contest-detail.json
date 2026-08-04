@@ -1,0 +1,36 @@
+{
+  "id": 333,
+  "title": "MakerDAO Endgame",
+  "starts_at": 1680000000,
+  "ends_at": 1685000000,
+  "status": "FINISHED",
+  "private": false,
+  "rewards": 200000,
+  "scope": [
+    {
+      "repo": "makerdao/dss-flappers",
+      "branch_name": "master",
+      "commit_hash": "b2e2ed17a1b2c3d4e5f6789012345678901234567",
+      "files": [
+        { "name": "src/Flapper.sol" },
+        { "name": "src/FlapperUniV2.sol" }
+      ]
+    },
+    {
+      "repo": "makerdao/endgame-toolkit",
+      "branch_name": "master",
+      "commit_hash": "70b59deb1234567890abcdef1234567890abcdef",
+      "files": [{ "name": "src/Toolkit.sol" }]
+    },
+    {
+      "repo": "not-a-valid-repo",
+      "commit_hash": "abc123",
+      "files": []
+    },
+    {
+      "repo": "makerdao/lockstake",
+      "branch_name": "master",
+      "commit_hash": ""
+    }
+  ]
+}

@@ -425,6 +425,7 @@ describe('GitHub repo snapshot requests', () => {
       locMethod: 'estimated_from_bytes',
       changedFiles: [{ path: 'src/Pool.sol', changedLoc: 42 }],
       commits: ['commit-one', 'abc123'],
+      auditPredatesRepo: false,
       complete: true,
       truncated: false,
       error: null,
@@ -495,6 +496,33 @@ describe('GitHub repo snapshot requests', () => {
     expect(observation.payload.cutoff).toEqual({
       lastAuditAt: '2026-07-01T00:00:00.000Z',
       baseCommit: 'dated-base',
+    });
+    expect(observation.payload.auditPredatesRepo).toBe(false);
+  });
+
+  it('treats an empty until-date commit list as the whole repo being post-audit', async () => {
+    const datedTarget = { ...target, coveredCommit: null };
+    const { observation, requests } = await collectSnapshot(datedTarget, (url) => {
+      if (url.includes('/commits/HEAD')) return headFixture;
+      if (url.includes('/git/trees/')) return treeFixture;
+      if (url.includes('/commits?until=')) return [];
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    expect(requests.map((request) => request.url)).toEqual([
+      'https://api.github.com/repos/acme/protocol/commits/HEAD',
+      'https://api.github.com/repos/acme/protocol/git/trees/tree456?recursive=1',
+      'https://api.github.com/repos/acme/protocol/commits?until=2026-07-01T00%3A00%3A00.000Z&per_page=1',
+    ]);
+    expect(observation.health).toEqual({ ok: true });
+    expect(observation.payload).toMatchObject({
+      cutoff: { lastAuditAt: '2026-07-01T00:00:00.000Z', baseCommit: null },
+      files: ['src/Pool.sol'],
+      changedFiles: [],
+      commits: [],
+      auditPredatesRepo: true,
+      complete: true,
+      error: null,
     });
   });
 
@@ -658,6 +686,7 @@ describe('GitHub repo snapshot requests', () => {
         locMethod: 'estimated_from_bytes',
         changedFiles: [],
         commits: [],
+        auditPredatesRepo: false,
         complete: false,
         truncated: false,
         error: 'first repo unavailable',

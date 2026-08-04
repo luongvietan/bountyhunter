@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { parseWeights } from '@kritt-radar/core';
 import { prisma } from '@kritt-radar/db';
 import { findTarget, type RankedTarget, type TargetSignal } from '../../../lib/target-ranking';
+import { ConsoleNavbar } from '../../../components/console-navbar';
 import { ScopeHandoff } from './scope-handoff';
 
 export const dynamic = 'force-dynamic';
@@ -106,16 +107,7 @@ export default async function TargetRoute({ params }: TargetRouteProps) {
 
   return (
     <main className="page-shell" id="main-content">
-      <header className="masthead">
-        <div>
-          <p className="product-name">Kritt Radar</p>
-          <p className="console-label">Internal operator console</p>
-        </div>
-        <nav className="masthead-nav" aria-label="Console sections">
-          <Link href="/targets">Targets</Link>
-          <Link href="/merge-queue">Merge queue</Link>
-        </nav>
-      </header>
+      <ConsoleNavbar activeSection="targets" />
 
       <section className="route-heading">
         <div>
