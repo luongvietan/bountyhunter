@@ -341,18 +341,25 @@ async function materializeCatalog(
   programs: readonly ProgramInput[],
   now: Date,
 ): Promise<{ programs: number; scopes: number; programAudits: number; entityIds: Set<string> }> {
-  return prisma.$transaction(async (tx) => {
-    const entityIds = await syncConfigAliases(tx, aliases);
-    let scopes = 0;
-    let programAudits = 0;
-    for (const program of programs) {
-      const saved = await upsertProgram(tx, program, now);
-      entityIds.add(saved.entityId);
-      scopes += saved.scopes;
-      programAudits += saved.audits;
-    }
-    return { programs: programs.length, scopes, programAudits, entityIds };
-  });
+  // One transaction per program rather than one around the whole catalog.
+  // A single transaction over every program ran for longer than Prisma's
+  // interactive-transaction timeout once the catalog passed a few hundred
+  // entries, and the run died with "Transaction not found" after the writes
+  // had already started. Per-program is also the honest atomic unit: a
+  // program with its scopes, signals and audits either lands or does not, and
+  // every write is an upsert, so a partial run is completed by the next one.
+  const entityIds = await prisma.$transaction((tx) => syncConfigAliases(tx, aliases));
+
+  let scopes = 0;
+  let programAudits = 0;
+  for (const program of programs) {
+    const saved = await prisma.$transaction((tx) => upsertProgram(tx, program, now));
+    entityIds.add(saved.entityId);
+    scopes += saved.scopes;
+    programAudits += saved.audits;
+  }
+
+  return { programs: programs.length, scopes, programAudits, entityIds };
 }
 
 async function materializeAudits(
@@ -365,15 +372,19 @@ async function materializeAudits(
   });
   const records = toAuditReportRecords(rows);
 
-  return prisma.$transaction(async (tx) => {
-    const entityIds = new Set<string>();
-    const candidateKeys = new Set<string>();
-    const programEntities = await tx.entity.findMany({
-      where: { programs: { some: {} } },
-      select: { id: true, canonicalName: true, slug: true },
-    });
+  const entityIds = new Set<string>();
+  const candidateKeys = new Set<string>();
+  // Read the candidate targets once, outside any transaction: it is a large
+  // read that does not need to be inside the write that follows.
+  const programEntities = await prisma.entity.findMany({
+    where: { programs: { some: {} } },
+    select: { id: true, canonicalName: true, slug: true },
+  });
 
-    for (const record of records) {
+  // Per report, for the same reason as the catalog above: six hundred reports
+  // in one interactive transaction outlives Prisma's timeout.
+  for (const record of records) {
+    await prisma.$transaction(async (tx) => {
       const auditHintKey = record.report.projectHint.trim().toLowerCase();
       const exactAlias = await tx.entityAlias.findUnique({
         where: { kind_key: { kind: 'audit_hint', key: auditHintKey } },
@@ -460,9 +471,10 @@ async function materializeAudits(
         create: { ...record.report, entityId },
         update: { ...reportUpdate, ...(shouldUpdateEntity ? { entityId } : {}) },
       });
-    }
-    return { reports: records.length, candidates: candidateKeys.size, entityIds };
-  });
+    });
+  }
+
+  return { reports: records.length, candidates: candidateKeys.size, entityIds };
 }
 
 export async function materializeCatalogFoundation(
