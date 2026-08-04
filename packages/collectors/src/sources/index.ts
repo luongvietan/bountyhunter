@@ -47,3 +47,11 @@ export {
   parseDefillamaProtocols,
   type DefillamaTvlPayload,
 } from './defillama-tvl.js';
+export {
+  chainIdFor,
+  makeEtherscanVerified,
+  parseEtherscanSource,
+  type ContractTarget,
+  type EtherscanJsonFetcher,
+  type EtherscanVerifiedPayload,
+} from './etherscan-verified.js';
