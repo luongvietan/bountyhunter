@@ -1114,6 +1114,7 @@ describe('sync', () => {
     await sync({
       collectCatalog: stage('collect-catalog'),
       materializeCatalog: stage('materialize-catalog'),
+      collectContracts: stage('collect-contracts'),
       collectGithub: stage('collect-github'),
       materializeSignals: stage('materialize-signals'),
       rank: stage('rank'),
@@ -1122,6 +1123,7 @@ describe('sync', () => {
     expect(calls).toEqual([
       'collect-catalog',
       'materialize-catalog',
+      'collect-contracts',
       'collect-github',
       'materialize-signals',
       'rank',
@@ -1137,6 +1139,7 @@ describe('sync', () => {
     await sync({
       collectCatalog: stage('collect-catalog'),
       materializeCatalog: stage('materialize-catalog'),
+      collectContracts: stage('collect-contracts'),
       collectGithub: async () => {
         calls.push('collect-github:partial');
         return { status: 'partial' as const };
@@ -1148,6 +1151,7 @@ describe('sync', () => {
     expect(calls).toEqual([
       'collect-catalog',
       'materialize-catalog',
+      'collect-contracts',
       'collect-github:partial',
       'materialize-signals',
       'rank',
@@ -1168,6 +1172,7 @@ describe('sync', () => {
           calls.push('materialize-catalog');
           throw hardError;
         },
+        collectContracts: stage('collect-contracts'),
         collectGithub: stage('collect-github'),
         materializeSignals: stage('materialize-signals'),
         rank: stage('rank'),
