@@ -1,13 +1,20 @@
-# V1 để trọng số bằng nhau: hiện chưa có dữ liệu nào nói tín hiệu nào quan trọng
-# hơn. Bảng Outcome (pha 2) sẽ trả lời câu đó. Đổi trọng số thì tăng version để
-# so sánh được hai bộ trên cùng tập dữ liệu.
-# v2: confidence nhân vào trọng số rồi mới chuẩn hoá, thay vì chỉ làm cổng chặn.
-# Bump version vì cùng bộ số này giờ cho ra điểm khác — để lại v1 thì việc so
-# sánh hai bộ trọng số trên cùng dữ liệu sẽ sai một cách âm thầm.
-version: v2-confidence-weighted
+# Trọng số bằng nhau: chưa có dữ liệu nào nói tín hiệu nào quan trọng hơn. Bảng
+# Outcome sẽ trả lời câu đó khi đủ mẫu.
+#
+# v3: điểm nhân với độ phủ. Mẫu số là tổng trọng số cấu hình chứ không phải tổng
+# trọng số đo được, nên một target chỉ có một tín hiệu không thể đạt trần. Bản
+# trước chuẩn hoá lại trên phần đo được, và ở quy mô thật nó cho một scope chỉ có
+# `value_at_risk` đạt 100 điểm, đứng trên MakerDAO vốn được đo bằng cả ba.
+#
+# Bump version mỗi lần công thức hoặc trọng số đổi: Score lưu weightsVersion, nên
+# giữ nguyên tên sẽ khiến việc so sánh hai lần chạy sai một cách âm thầm.
+version: v3-coverage-weighted
 minConfidence: 0.3
 weights:
   audit_gap: 1
   freshness: 1
-  competition: 1
   value_at_risk: 1
+  # Trọng số 0 = không tính vào thang điểm. Extractor `competition` chưa được
+  # cài đặt nên không sinh tín hiệu nào; để nó ở 1 sẽ chặn trần MỌI target ở 75
+  # điểm vì một phép đo không tồn tại.
+  competition: 0

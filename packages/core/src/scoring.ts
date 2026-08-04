@@ -21,6 +21,11 @@ export interface ScoreResult {
   total: number;
   breakdown: ScoreContribution[];
   usedSignals: number;
+  /**
+   * Phần trọng số cấu hình thực sự đo được, 0..1. Điểm 40 với coverage 1.0 nói
+   * lên điều khác hẳn điểm 40 với coverage 0.33.
+   */
+  coverage: number;
   skipped: SignalType[];
   weightsVersion: string;
 }
@@ -28,17 +33,19 @@ export interface ScoreResult {
 /**
  * Tổng có trọng số, thang 0..100.
  *
- * Tín hiệu thiếu dữ liệu (confidence thấp) bị LOẠI và trọng số được chuẩn hoá
- * lại trên phần còn lại — chứ không bị tính như value=0. Nếu tính như 0, một
- * target chỉ vì thiếu dữ liệu sẽ tụt hạng y như một target thật sự kém, và
- * bảng xếp hạng sẽ ưu ái những target dễ crawl thay vì những target đáng làm.
+ * Điểm đo hai thứ cùng lúc: ta biết GÌ, và ta biết được BAO NHIÊU. Mẫu số là
+ * tổng trọng số cấu hình, không phải tổng trọng số đo được, nên một target chỉ
+ * có một tín hiệu không thể đạt trần.
  *
- * Confidence không chỉ là cổng chặn mà còn nhân thẳng vào trọng số. Nếu chỉ
- * chặn, một phỏng đoán 1.0 ở confidence 0.35 đóng góp y hệt một phép đo 1.0 ở
- * confidence 0.7, và những target ta biết ít nhất lại leo lên đầu bảng bằng
- * chính sự thiếu hiểu biết đó. Nhân vào trọng số rồi chuẩn hoá lại giữ nguyên
- * hành vi ở hai đầu mút — confidence 0 vẫn bị loại, các tín hiệu cùng độ tin cậy
- * vẫn chia đều — nhưng liên tục ở khoảng giữa.
+ * Bản trước chuẩn hoá lại trên các tín hiệu dùng được, và ở quy mô thật điều đó
+ * hoá ra sai: 1425 scope chỉ có một tín hiệu, và một trong số đó đạt 100 điểm
+ * chỉ nhờ `value_at_risk`, đứng trên một target được đo bằng cả ba tín hiệu.
+ * Chuẩn hoá lại đã thổi phồng thông tin bộ phận lên thang đầy đủ.
+ *
+ * Confidence nhân thẳng vào trọng số, nên nó vừa hạ đóng góp vừa hạ độ phủ:
+ * ba phép đo yếu xếp dưới ba phép đo chắc. Bất biến cũ vẫn còn: tín hiệu
+ * confidence 0 đóng góp 0 vào tử số và không đụng mẫu số, nên thêm nó vào không
+ * làm đổi điểm.
  */
 export function score(signals: readonly SignalValue[], weights: Weights): ScoreResult {
   const used: SignalValue[] = [];
@@ -53,14 +60,27 @@ export function score(signals: readonly SignalValue[], weights: Weights): ScoreR
   const effectiveWeight = (s: SignalValue): number =>
     (weights.weights[s.type] ?? 0) * clamp01(s.confidence);
 
-  const totalWeight = used.reduce((acc, s) => acc + effectiveWeight(s), 0);
+  // Trọng số 0 nghĩa là tín hiệu đó không được tính vào thang điểm — dùng cho
+  // tín hiệu chưa cài đặt, để nó không âm thầm chặn trần mọi target.
+  const configuredWeight = Object.values(weights.weights).reduce(
+    (acc, w) => acc + (w > 0 ? w : 0),
+    0,
+  );
+  const usedWeight = used.reduce((acc, s) => acc + effectiveWeight(s), 0);
 
-  if (totalWeight <= 0) {
-    return { total: 0, breakdown: [], usedSignals: 0, skipped, weightsVersion: weights.version };
+  if (configuredWeight <= 0 || usedWeight <= 0) {
+    return {
+      total: 0,
+      breakdown: [],
+      usedSignals: 0,
+      coverage: 0,
+      skipped,
+      weightsVersion: weights.version,
+    };
   }
 
   const breakdown: ScoreContribution[] = used.map((s) => {
-    const normalizedWeight = effectiveWeight(s) / totalWeight;
+    const normalizedWeight = effectiveWeight(s) / configuredWeight;
     return {
       type: s.type,
       value: s.value,
@@ -70,7 +90,20 @@ export function score(signals: readonly SignalValue[], weights: Weights): ScoreR
     };
   });
 
-  const total = breakdown.reduce((acc, b) => acc + b.contribution, 0);
+  // Một phép chia thay vì cộng dồn từng đóng góp: cộng ba lần một phần ba cho
+  // 99.99999999999999, và điểm tròn nên tròn thật.
+  const weightedValue = used.reduce(
+    (acc, s) => acc + clamp01(s.value) * effectiveWeight(s),
+    0,
+  );
+  const total = (weightedValue / configuredWeight) * 100;
 
-  return { total, breakdown, usedSignals: used.length, skipped, weightsVersion: weights.version };
+  return {
+    total,
+    breakdown,
+    usedSignals: used.length,
+    coverage: usedWeight / configuredWeight,
+    skipped,
+    weightsVersion: weights.version,
+  };
 }
