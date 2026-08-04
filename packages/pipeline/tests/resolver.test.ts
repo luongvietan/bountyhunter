@@ -28,6 +28,16 @@ uniswap-v4:
     });
   });
 
+  it('does not create empty defillama alias keys', () => {
+    const table = parseAliases(`
+uniswap-v4:
+  canonicalName: Uniswap v4
+  match:
+    - defillama: "   "
+`);
+    expect(table.byDefillama.size).toBe(0);
+  });
+
   it('khớp bằng repo key chuẩn hoá', () => {
     const r = resolveEntityKey({ repoUrl: 'https://github.com/Uniswap/v4-core.git' }, aliases);
     expect(r).toEqual({ slug: 'uniswap-v4', canonicalName: 'Uniswap v4', tier: 1 });

@@ -47,8 +47,9 @@ export function parseAliases(yamlText: string): AliasTable {
         );
       } else if ('auditHint' in rule) {
         byAuditHint.set(rule.auditHint.trim().toLowerCase(), target);
-      } else {
-        byDefillama.set(rule.defillama.trim().toLowerCase(), target);
+      } else if ('defillama' in rule) {
+        const key = rule.defillama.trim().toLowerCase();
+        if (key) byDefillama.set(key, target);
       }
     }
   }
