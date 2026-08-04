@@ -17,6 +17,7 @@ import {
 import { prisma, saveObservations } from '@kritt-radar/db';
 import {
   listContractTargets,
+  materializeEtherscanVerified,
   materializeProtocolTvl,
   materializeValueAtRisk,
   rankScopes,
@@ -134,6 +135,10 @@ async function collectContracts(): Promise<CollectorRunResult> {
 }
 
 async function materializeSignals(): Promise<void> {
+  const etherscanResult = await materializeEtherscanVerified(prisma);
+  console.log(
+    `[signals] etherscan-verified: ${etherscanResult.matched}/${etherscanResult.observations} scopes matched`,
+  );
   const result = await materializeRepoSignals(prisma, new Date());
   console.log(`[signals] audit_gap: ${result.scopes} scopes / ${result.noData} no data`);
   const varCount = await materializeValueAtRisk(prisma);

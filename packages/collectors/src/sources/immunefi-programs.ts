@@ -3,6 +3,49 @@ import { normalizeRepoUrl } from '@kritt-radar/core';
 import { fetchJson } from '../http.js';
 import { makeObservation, type Collector, type FetchCtx } from '../types.js';
 
+/**
+ * Host explorer → chain. Chỉ nhận URL từ các explorer này — địa chỉ 0x trần
+ * (không có host) không dùng được vì không biết chain nào, gộp nhầm entity.
+ */
+const CONTRACT_EXPLORER_HOSTS: Readonly<Record<string, string>> = {
+  'etherscan.io': 'ethereum',
+  'arbiscan.io': 'arbitrum',
+  'optimistic.etherscan.io': 'optimism',
+  'basescan.org': 'base',
+  'polygonscan.com': 'polygon',
+  'bscscan.com': 'bsc',
+  'snowtrace.io': 'avalanche',
+  'lineascan.build': 'linea',
+  'scrollscan.com': 'scroll',
+  'ftmscan.com': 'fantom',
+  'gnosisscan.io': 'gnosis',
+};
+
+const CONTRACT_ADDRESS = /^0x[0-9a-f]{40}$/;
+
+/**
+ * Nhận diện URL kiểu `https://etherscan.io/address/0x...` (và các blockscan
+ * họ hàng) rồi trả về chain + address chuẩn hoá. Trả null cho mọi thứ khác —
+ * kể cả địa chỉ hex trần không kèm host, vì không có host thì không biết chain.
+ */
+export function parseContractAssetUrl(url: string): { chain: string; address: string } | null {
+  if (!url) return null;
+  let s = url.trim().toLowerCase();
+  if (!s) return null;
+
+  s = s.replace(/^[a-z]+:\/\//, '');
+  s = s.replace(/^www\./, '');
+
+  const [host, segment, addressRaw] = s.split('/').filter(Boolean);
+  if (!host || segment !== 'address' || !addressRaw) return null;
+
+  const chain = CONTRACT_EXPLORER_HOSTS[host];
+  if (!chain) return null;
+
+  const address = addressRaw.split(/[?#]/)[0] ?? '';
+  return CONTRACT_ADDRESS.test(address) ? { chain, address } : null;
+}
+
 const MIRROR_REPO = 'infosec-us-team/Immunefi-Bug-Bounty-Programs-Unofficial';
 const PROJECTS_URL = `https://raw.githubusercontent.com/${MIRROR_REPO}/main/projects.json`;
 const COMMITS_URL = `https://api.github.com/repos/${MIRROR_REPO}/commits?per_page=1`;
@@ -42,6 +85,13 @@ export interface ImmunefiAsset {
   addedAt: string | null;
 }
 
+export interface ImmunefiContractAsset {
+  assetId: string;
+  chain: string;
+  address: string;
+  addedAt: string | null;
+}
+
 export interface ImmunefiAudit {
   /** Khoá ổn định của Immunefi. Dùng cái này, KHÔNG dùng `url` — url trùng nhau. */
   auditId: string;
@@ -62,6 +112,8 @@ export interface ImmunefiProgramPayload {
   publishedAt: string | null;
   updatedAt: string | null;
   assets: ImmunefiAsset[];
+  /** Asset là địa chỉ hợp đồng on-chain (etherscan họ hàng), không phải repo git. */
+  contracts: ImmunefiContractAsset[];
   /**
    * Audit mà Immunefi khai cho chính program này.
    *
@@ -116,20 +168,33 @@ export function parseImmunefiProjects(raw: unknown): Array<{
     if (p.inviteOnly) continue;
 
     const assets: ImmunefiAsset[] = [];
+    const contracts: ImmunefiContractAsset[] = [];
     for (const a of p.assets ?? []) {
       const asset = RawAsset.safeParse(a);
       if (!asset.success) continue;
       const repoKey = normalizeRepoUrl(asset.data.url);
-      if (!repoKey) continue; // bỏ website, endpoint API, địa chỉ contract
-      assets.push({
+      if (repoKey) {
+        assets.push({
+          assetId: asset.data.id,
+          repoKey,
+          type: asset.data.type ?? null,
+          addedAt: asset.data.addedAt ?? null,
+        });
+        continue;
+      }
+      const contract = parseContractAssetUrl(asset.data.url);
+      if (!contract) continue; // bỏ website, endpoint API, mọi thứ không nhận dạng được
+      contracts.push({
         assetId: asset.data.id,
-        repoKey,
-        type: asset.data.type ?? null,
+        chain: contract.chain,
+        address: contract.address,
         addedAt: asset.data.addedAt ?? null,
       });
     }
 
-    if (assets.length === 0) continue; // không có code thì không tính audit_gap được
+    // Giữ program nếu có ít nhất một trong hai: repo tính audit_gap, hoặc
+    // contract để etherscan-verified có mục tiêu mà thu thập.
+    if (assets.length === 0 && contracts.length === 0) continue;
 
     const payload: ImmunefiProgramPayload = {
       platform: 'immunefi',
@@ -142,6 +207,7 @@ export function parseImmunefiProjects(raw: unknown): Array<{
       publishedAt: p.launchDate ?? null,
       updatedAt: p.updatedDate ?? null,
       assets,
+      contracts,
       audits: parseAudits(p.audits),
     };
     out.push(makeObservation('immunefi-programs', payload.url, payload));

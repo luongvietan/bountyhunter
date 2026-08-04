@@ -1,4 +1,5 @@
 import type { ImmunefiProgramPayload, ProgramPayload, SherlockProgramPayload } from '@kritt-radar/collectors';
+import { normalizeChainAddress } from '@kritt-radar/core';
 
 export interface ObservationRow {
   sourceUrl: string;
@@ -103,10 +104,13 @@ export function toProgramRecords(rows: readonly LatestObservation[]): ProgramRec
 }
 
 export interface ScopeRecord {
-  kind: 'repo';
+  kind: 'repo' | 'contract';
   hardKey: string;
-  repoUrl: string;
+  repoUrl: string | null;
   pathGlobs: string[];
+  /** Chỉ có ở scope kind=contract. */
+  chain?: string;
+  address?: string;
   /** Ngày asset được thêm vào scope. null = mirror không cho biết. */
   addedAt: Date | null;
 }
@@ -204,6 +208,30 @@ export function toImmunefiRecords(rows: readonly LatestObservation[]): MultiScop
       });
     }
 
+    const byContract = new Map<string, ScopeRecord>();
+    for (const c of p.contracts ?? []) {
+      const hardKey = normalizeChainAddress(c.chain, c.address);
+      if (!hardKey) continue; // địa chỉ hỏng thì bỏ, không tạo scope rỗng
+      const addedAt = toDate(c.addedAt);
+      const existing = byContract.get(hardKey);
+      if (existing) {
+        const currentMs = existing.addedAt?.getTime() ?? -Infinity;
+        const nextMs = addedAt?.getTime() ?? -Infinity;
+        if (nextMs > currentMs) existing.addedAt = addedAt;
+        continue;
+      }
+      const separator = hardKey.indexOf(':');
+      byContract.set(hardKey, {
+        kind: 'contract',
+        hardKey,
+        repoUrl: null,
+        pathGlobs: [],
+        chain: hardKey.slice(0, separator),
+        address: hardKey.slice(separator + 1),
+        addedAt,
+      });
+    }
+
     out.push({
       program: {
         platform: p.platform,
@@ -216,7 +244,7 @@ export function toImmunefiRecords(rows: readonly LatestObservation[]): MultiScop
         startsAt: toDate(p.publishedAt),
         endsAt: null,
       },
-      scopes: [...byRepo.values()],
+      scopes: [...byRepo.values(), ...byContract.values()],
       audits: toProgramAudits(p),
       changedAt: row.changedAt,
     });
