@@ -1810,3 +1810,126 @@ summary:focus-visible {
 .result-excluded {
   color: var(--ink-quiet);
 }
+
+/* ---------------------------------------------------------------------------
+   Findings queue
+   --------------------------------------------------------------------------- */
+
+.finding-card {
+  padding: 20px;
+  border-radius: var(--radius-xl);
+  background: var(--canvas);
+  box-shadow: var(--shadow-subtle);
+}
+
+.finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.finding-head h2 {
+  margin: 0 0 4px;
+  font-size: var(--text-subheading);
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.finding-meta {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  overflow-wrap: anywhere;
+}
+
+.finding-meta code {
+  font-family: var(--font-mono);
+}
+
+.finding-figures {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.finding-figures dt {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.finding-figures dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+
+/* Ahead of the controls on purpose: the operator meets the gaps while
+   deciding, not after. */
+.finding-blockers {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ember);
+  border-radius: var(--radius-md);
+  background: var(--ember-soft);
+  color: var(--danger-ink);
+  font-size: var(--text-caption);
+}
+
+.finding-reasoning {
+  margin: 12px 0 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  max-width: 70ch;
+  text-wrap: pretty;
+}
+
+.finding-report {
+  margin-top: 16px;
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+
+.finding-report summary {
+  cursor: pointer;
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+
+.finding-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 0;
+}
+
+.finding-report textarea {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--bench);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.finding-decisions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.finding-decisions form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
