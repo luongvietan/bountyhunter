@@ -16,7 +16,9 @@ export default defineConfig({
   },
   test: {
     include: ['packages/**/tests/**/*.test.ts', 'apps/**/tests/**/*.test.ts'],
-    exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
+    // Playwright specs need a browser and a live server; excluded explicitly so
+    // a future rename cannot quietly pull them into the unit run.
+    exclude: [...configDefaults.exclude, '**/*.integration.test.ts', '**/*.e2e.spec.ts'],
     environment: 'node',
   },
 });

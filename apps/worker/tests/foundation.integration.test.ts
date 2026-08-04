@@ -9,6 +9,7 @@ import {
 } from '../src/foundation.js';
 import { withSafeIntegrationDatabase } from './integration-database.js';
 import { sync } from '../src/cli.js';
+import { decideMergeCandidate } from '../../web/src/lib/merge-decisions.js';
 
 const prisma = new PrismaClient();
 const now = new Date('2026-08-03T12:00:00.000Z');
@@ -196,7 +197,15 @@ describe('materializeCatalogFoundation', () => {
   it('returns per-invocation counts and deterministically materializes exact and fallback entities', async () => {
     const result = await materializeCatalogFoundation(prisma, aliasesYaml, now);
 
-    expect(result).toEqual({ programs: 2, scopes: 2, entities: 2, reports: 2, candidates: 0 });
+    expect(result).toEqual({
+      programs: 2,
+      scopes: 2,
+      entities: 2,
+      reports: 2,
+      // Immunefi seeds carry no audits[], so the structural bridge contributes nothing here.
+      programAudits: 0,
+      candidates: 0,
+    });
     expect(await countDroppedContestPrograms(prisma)).toBe(1);
     expect(await prisma.entity.count()).toBe(3);
     expect(await prisma.entityAlias.count()).toBe(1);
@@ -303,15 +312,51 @@ describe('materializeCatalogFoundation', () => {
     expect(secondFuzzyReport.entityId).not.toBe(secondFuzzyEntity.id);
 
     const decidedAt = new Date(now.getTime() + 3_000);
-    await prisma.$transaction([
-      prisma.auditReport.update({ where: { id: fuzzyReport.id }, data: { entityId: fuzzyEntity.id } }),
-      prisma.mergeCandidate.update({
-        where: { id: candidate.id },
-        data: { status: 'approved', decidedAt },
-      }),
-    ]);
+    await expect(decideMergeCandidate(prisma, {
+      candidateId: candidate.id,
+      action: 'approve',
+      now: decidedAt,
+    })).resolves.toMatchObject({ ok: true, reportsMoved: 1 });
+    const approved = await prisma.mergeCandidate.findUniqueOrThrow({ where: { id: candidate.id } });
+    const approvedReason = approved.reason as Record<string, unknown>;
+    const approvalEvidence = approvedReason.approvalEvidence;
+    expect(approvalEvidence).toMatchObject({
+      reportsMoved: 1,
+      aliasKeys: ['a protocol'],
+      newestReport: {
+        firm: 'auditor',
+        projectHint: 'a protocol',
+        publishedAt: '2026-06-03T00:00:00.000Z',
+        reportUrl: 'https://reports.example/fuzzy-protocol-a.pdf',
+      },
+    });
+    await prisma.mergeCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        similarity: 0.01,
+        reason: {
+          tokenJaccard: 0.01,
+          editSimilarity: 0.02,
+          approvalEvidence: approvalEvidence as object,
+        },
+      },
+    });
+    await prisma.observation.create({
+      data: {
+        collectorId: 'audit-report-repos',
+        sourceUrl: 'https://reports.example/fuzzy-replay-index',
+        fetchedAt: new Date(now.getTime() + 4_000),
+        contentHash: 'audit-fuzzy-protocol-a-reformatted',
+        payload: [{
+          firm: 'auditor-two',
+          projectHint: ' A---PROTOCOL security review ',
+          publishedAt: '2026-06-04T00:00:00.000Z',
+          reportUrl: 'https://reports.example/fuzzy-protocol-a-reformatted.pdf',
+        }],
+      },
+    });
 
-    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 4_000));
+    await materializeCatalogFoundation(prisma, aliasesYaml, new Date(now.getTime() + 5_000));
 
     expect((await prisma.auditReport.findUniqueOrThrow({ where: { id: fuzzyReport.id } })).entityId).toBe(
       fuzzyEntity.id,
@@ -319,6 +364,12 @@ describe('materializeCatalogFoundation', () => {
     expect(await prisma.mergeCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({
       status: 'approved',
       decidedAt,
+      similarity: 0.84,
+      reason: {
+        tokenJaccard: 1,
+        editSimilarity: 0.6,
+        approvalEvidence,
+      },
     });
   });
 
@@ -728,7 +779,7 @@ describe('materializeRepoSignals', () => {
       ],
     });
 
-    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 1 });
+    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 1, auditCoverage: 'unsearched' });
     const [savedUniswapScope, savedAaveScope, uniswapSignal, aaveSignal] = await Promise.all([
       prisma.scope.findUniqueOrThrow({ where: { id: uniswapScope.id } }),
       prisma.scope.findUniqueOrThrow({ where: { id: aaveScope.id } }),
@@ -752,6 +803,7 @@ describe('materializeRepoSignals', () => {
     expect(await materializeRepoSignals(prisma, new Date(now.getTime() + 1_000))).toEqual({
       scopes: 2,
       noData: 1,
+      auditCoverage: 'unsearched',
     });
     expect(
       (
@@ -876,7 +928,7 @@ describe('materializeRepoSignals', () => {
       ],
     });
 
-    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 2 });
+    expect(await materializeRepoSignals(prisma, now)).toEqual({ scopes: 2, noData: 2, auditCoverage: 'unsearched' });
 
     const signal = await prisma.signal.findUniqueOrThrow({
       where: { scopeId_type: { scopeId: uniswapScope.id, type: 'audit_gap' } },
@@ -1013,6 +1065,7 @@ describe('materializeRepoSignals', () => {
     expect(await materializeRepoSignals(prisma, new Date(now.getTime() + 2_000))).toEqual({
       scopes: 3,
       noData: 1,
+      auditCoverage: 'unsearched',
     });
     const [firstSignal, secondSignal] = await Promise.all([
       prisma.signal.findUniqueOrThrow({

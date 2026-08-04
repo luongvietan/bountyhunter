@@ -31,6 +31,60 @@ type ProgramInput = {
   scopes: ScopeInput[];
   audits?: ProgramAuditRecord[];
 };
+type CandidateScoreReason = { tokenJaccard: number; editSimilarity: number };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isExactIsoDate(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value;
+}
+
+function isValidApprovalEvidence(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.reportsMoved !== 'number'
+    || !Number.isSafeInteger(value.reportsMoved)
+    || value.reportsMoved < 1
+    || !Array.isArray(value.aliasKeys)
+    || value.aliasKeys.length < 1
+  ) return false;
+
+  const aliasKeys = value.aliasKeys;
+  for (let index = 0; index < aliasKeys.length; index += 1) {
+    const key = aliasKeys[index];
+    if (typeof key !== 'string' || key.length === 0 || key !== key.trim().toLowerCase()) {
+      return false;
+    }
+    if (index > 0 && aliasKeys[index - 1]! >= key) return false;
+  }
+
+  if (!isRecord(value.newestReport)) return false;
+  return (
+    typeof value.newestReport.firm === 'string'
+    && value.newestReport.firm.length > 0
+    && typeof value.newestReport.projectHint === 'string'
+    && value.newestReport.projectHint.length > 0
+    && typeof value.newestReport.reportUrl === 'string'
+    && value.newestReport.reportUrl.length > 0
+    && isExactIsoDate(value.newestReport.publishedAt)
+  );
+}
+
+export function refreshCandidateReason(
+  existingStatus: string | undefined,
+  existingReason: unknown,
+  freshScores: CandidateScoreReason,
+): Record<string, unknown> {
+  if (existingStatus !== 'approved' || !isRecord(existingReason)) return freshScores;
+  const snapshot = existingReason.approvalEvidence;
+  return isValidApprovalEvidence(snapshot)
+    ? { ...freshScores, approvalEvidence: snapshot }
+    : freshScores;
+}
 
 export interface FoundationResult {
   programs: number;
@@ -329,13 +383,18 @@ async function materializeAudits(
           const candidate = scoreCandidate(record.report.projectHint, programEntity.canonicalName);
           if (candidate.similarity < CANDIDATE_THRESHOLD) continue;
           candidateKeys.add(`${provisional.id}\u0000${programEntity.id}`);
-          await tx.mergeCandidate.upsert({
-            where: {
-              leftEntityId_rightEntityId: {
-                leftEntityId: provisional.id,
-                rightEntityId: programEntity.id,
-              },
+          const candidateWhere = {
+            leftEntityId_rightEntityId: {
+              leftEntityId: provisional.id,
+              rightEntityId: programEntity.id,
             },
+          };
+          const existingCandidate = await tx.mergeCandidate.findUnique({
+            where: candidateWhere,
+            select: { status: true, reason: true },
+          });
+          await tx.mergeCandidate.upsert({
+            where: candidateWhere,
             create: {
               leftEntityId: provisional.id,
               rightEntityId: programEntity.id,
@@ -345,7 +404,11 @@ async function materializeAudits(
             },
             update: {
               similarity: candidate.similarity,
-              reason: candidate.reason,
+              reason: refreshCandidateReason(
+                existingCandidate?.status,
+                existingCandidate?.reason,
+                candidate.reason,
+              ) as Prisma.InputJsonObject,
             },
           });
         }
