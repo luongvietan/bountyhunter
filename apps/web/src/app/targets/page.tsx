@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import Link from 'next/link';
-import { parseWeights } from '@kritt-radar/core';
+import { parseExclusions, parseWeights } from '@kritt-radar/core';
 import { prisma } from '@kritt-radar/db';
 import { isDatabaseSetupError } from '../merge-queue/database-setup';
 import { ConsoleNavbar } from '../../components/console-navbar';
@@ -42,6 +42,16 @@ function formatPool(value: number | null): string {
 async function loadWeights() {
   const workspaceRoot = resolve(process.cwd(), '../..');
   return parseWeights(await readFile(resolve(workspaceRoot, 'config/weights.yml'), 'utf8'));
+}
+
+async function loadExclusions() {
+  const workspaceRoot = resolve(process.cwd(), '../..');
+  // Missing file means nothing is excluded, which is a safe default: the list
+  // gets noisier, never quietly shorter.
+  const text = await readFile(resolve(workspaceRoot, 'config/exclusions.yml'), 'utf8').catch(
+    () => 'owners: []',
+  );
+  return parseExclusions(text);
 }
 
 function filterHref(
@@ -140,7 +150,7 @@ export default async function TargetsRoute({ searchParams }: TargetsRouteProps) 
 
   let page: TargetRankingPage;
   try {
-    page = await listRankedTargets(prisma, await loadWeights(), raw);
+    page = await listRankedTargets(prisma, await loadWeights(), raw, await loadExclusions());
   } catch (error) {
     if (isDatabaseSetupError(error, process.env.DATABASE_URL)) return <SetupState />;
     throw error;
@@ -193,6 +203,14 @@ export default async function TargetsRoute({ searchParams }: TargetsRouteProps) 
       <section className="queue-region" aria-label="Ranked targets">
         <p className="result-count">
           Showing {page.totals.shown} of {page.totals.all} repositories
+          {/* Never shrink the list without saying so. */}
+          {page.totals.closed + page.totals.excludedOwner > 0 ? (
+            <span className="result-excluded">
+              {' · '}
+              {page.totals.closed} scope{page.totals.closed === 1 ? '' : 's'} hidden as closed
+              programs, {page.totals.excludedOwner} as mirror or audit-firm repositories
+            </span>
+          ) : null}
         </p>
 
         {page.targets.length === 0 ? (

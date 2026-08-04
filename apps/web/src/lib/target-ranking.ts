@@ -1,4 +1,12 @@
-import { score, type ScoreResult, type SignalType, type SignalValue, type Weights } from '@kritt-radar/core';
+import {
+  exclusionFor,
+  score,
+  type Exclusions,
+  type ScoreResult,
+  type SignalType,
+  type SignalValue,
+  type Weights,
+} from '@kritt-radar/core';
 import type { PrismaClient, Program, Scope, Signal } from '@kritt-radar/db';
 
 export interface TargetSignal {
@@ -60,7 +68,15 @@ export interface TargetRankingPage {
   targets: RankedTarget[];
   platforms: string[];
   filters: RankingFilters;
-  totals: { all: number; measured: number; shown: number };
+  totals: {
+    all: number;
+    measured: number;
+    shown: number;
+    /** Dropped because their program has closed; no submission is possible. */
+    closed: number;
+    /** Dropped by an owner rule: mirrors, scoping forks, audit-firm repos. */
+    excludedOwner: number;
+  };
   weightsVersion: string;
 }
 
@@ -228,6 +244,8 @@ export async function listRankedTargets(
   prisma: PrismaClient,
   weights: Weights,
   raw: { platform?: string | string[]; measured?: string | string[] },
+  exclusions: Exclusions,
+  now: Date = new Date(),
 ): Promise<TargetRankingPage> {
   const scopes = (await prisma.scope.findMany({
     where: { kind: 'repo' },
@@ -235,7 +253,22 @@ export async function listRankedTargets(
     orderBy: { id: 'asc' },
   })) as ScopeWithEvidence[];
 
-  const all = groupByRepo(scopes.map((scope) => toTarget(scope, weights)));
+  // Exclude before grouping: a repository covered by one closed and one live
+  // program should keep ranking on the live one.
+  let closed = 0;
+  let excludedOwner = 0;
+  const eligible = scopes.filter((scope) => {
+    const verdict = exclusionFor(
+      { hardKey: scope.hardKey, endsAt: scope.program.endsAt },
+      exclusions,
+      now,
+    );
+    if (verdict.reason === 'closed_program') closed += 1;
+    if (verdict.reason === 'excluded_owner') excludedOwner += 1;
+    return !verdict.excluded;
+  });
+
+  const all = groupByRepo(eligible.map((scope) => toTarget(scope, weights)));
   const platforms = [...new Set(all.flatMap((t) => t.programs.map((p) => p.platform)))].sort();
 
   const filters: RankingFilters = {
@@ -260,6 +293,8 @@ export async function listRankedTargets(
       all: all.length,
       measured: all.filter((target) => isMeasuredAuditGap(target.signals)).length,
       shown: shown.length,
+      closed,
+      excludedOwner,
     },
     weightsVersion: weights.version,
   };

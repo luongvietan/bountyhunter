@@ -1,0 +1,18 @@
+# Repository owners that are never a scan target.
+#
+# These rows stay in the database. A closed contest is still audit evidence and
+# a mirror repository still records that the upstream was reviewed; they only
+# drop out of the target ranking. The dashboard reports how many were excluded
+# so the list never shrinks without saying so.
+owners:
+  - owner: code-423n4
+    reason: Contest mirror of the sponsor's code, not the code the bounty covers
+
+  - owner: sherlock-scoping
+    reason: Sherlock's scoping fork; the bounty pays out on the upstream repository
+
+  - owner: guardianaudits
+    reason: An audit firm's own repository, listed as an asset by mistake
+
+  - owner: immunefi-team
+    reason: The platform's own repositories

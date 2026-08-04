@@ -1806,3 +1806,7 @@ summary:focus-visible {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+
+.result-excluded {
+  color: var(--ink-quiet);
+}

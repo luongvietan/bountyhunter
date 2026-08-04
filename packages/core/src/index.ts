@@ -3,3 +3,4 @@ export * from './identity.js';
 export * from './signals.js';
 export * from './scoring.js';
 export * from './weights.js';
+export * from './exclusions.js';
