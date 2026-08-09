@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "cli": "tsx --env-file=../../.env src/cli.ts",
+    "cli:prod": "node dist/cli.js",
     "collect-catalog": "pnpm run cli collect-catalog",
     "materialize-catalog": "pnpm run cli materialize-catalog",
     "collect-github": "pnpm run cli collect-github",
