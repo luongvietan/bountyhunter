@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: workspaceRoot,
   },
+  // Mặc định Next chỉ trace trong apps/web, mà bốn package của workspace nằm
+  // ngoài đó — thiếu dòng này thì function trên Vercel chết vì module not found.
+  outputFileTracingRoot: workspaceRoot,
+  // Các trang targets/outcomes đọc hai file YAML này lúc chạy, nên chúng phải
+  // nằm trong bundle chứ không chỉ trong repo.
+  outputFileTracingIncludes: {
+    '/**': ['../../config/*.yml'],
+  },
 };
 
 export default nextConfig;
