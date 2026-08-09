@@ -314,10 +314,21 @@ pnpm -r build
 Expected: exit 0.
 
 ```bash
-find apps/web/.next -name "weights.yml"
+cat "apps/web/.next/server/app/targets/page.js.nft.json" | tr ',' '\n' | grep "config/.*yml"
 ```
 
-Expected: ít nhất một kết quả dưới `apps/web/.next/server/`. Nếu rỗng thì `outputFileTracingIncludes` chưa ăn — kiểm tra lại đường dẫn tương đối so với `apps/web`.
+Expected: bốn dòng, trong đó có `config/weights.yml` và `config/exclusions.yml`.
+
+Không dùng `find` để tìm file YAML trong `.next`: khi không bật `output: 'standalone'`, Next **không** copy file traced vào `.next/server`. Nó ghi manifest `.nft.json` cạnh mỗi page bundle, và đó chính là thứ Vercel đọc để lắp file vào serverless function. Tìm bằng `find` sẽ ra rỗng ngay cả khi cấu hình đã đúng.
+
+Kiểm tra thêm hai route còn lại, đặc biệt route động:
+
+```bash
+cat "apps/web/.next/server/app/targets/[id]/page.js.nft.json" | tr ',' '\n' | grep -c "config/.*yml"
+cat "apps/web/.next/server/app/outcomes/page.js.nft.json" | tr ',' '\n' | grep -c "config/.*yml"
+```
+
+Expected: cả hai in ra `4`.
 
 - [ ] **Step 3: Commit**
 
