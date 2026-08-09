@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { parseWeights } from '@kritt-radar/core';
 import { prisma } from '@kritt-radar/db';
+import { workspaceRoot } from '../../../lib/workspace-root';
 import { findTarget, type RankedTarget, type TargetSignal } from '../../../lib/target-ranking';
 import { ConsoleNavbar } from '../../../components/console-navbar';
 import { ScopeHandoff } from './scope-handoff';
@@ -99,8 +100,9 @@ function contributionOf(target: RankedTarget, type: string): number | null {
 
 export default async function TargetRoute({ params }: TargetRouteProps) {
   const { id } = await params;
-  const workspaceRoot = resolve(process.cwd(), '../..');
-  const weights = parseWeights(await readFile(resolve(workspaceRoot, 'config/weights.yml'), 'utf8'));
+  const weights = parseWeights(
+    await readFile(resolve(workspaceRoot(), 'config/weights.yml'), 'utf8'),
+  );
   const target = await findTarget(prisma, weights, id);
 
   if (!target) notFound();

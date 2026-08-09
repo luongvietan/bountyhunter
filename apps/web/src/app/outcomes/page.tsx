@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import Link from 'next/link';
 import { parseWeights } from '@kritt-radar/core';
 import { prisma } from '@kritt-radar/db';
+import { workspaceRoot } from '../../lib/workspace-root';
 import { ConsoleNavbar } from '../../components/console-navbar';
 import { isDatabaseSetupError } from '../merge-queue/database-setup';
 import { listOutcomesPage, parseResultFilter, type OutcomeResultFilter, type OutcomesPage } from '../../lib/outcomes';
@@ -27,8 +28,7 @@ const resultTabLabels: Record<OutcomeResultFilter, string> = {
 };
 
 async function loadWeights() {
-  const workspaceRoot = resolve(process.cwd(), '../..');
-  return parseWeights(await readFile(resolve(workspaceRoot, 'config/weights.yml'), 'utf8'));
+  return parseWeights(await readFile(resolve(workspaceRoot(), 'config/weights.yml'), 'utf8'));
 }
 
 function SetupState() {

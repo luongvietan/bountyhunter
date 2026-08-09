@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import Link from 'next/link';
 import { parseExclusions, parseWeights } from '@kritt-radar/core';
 import { prisma } from '@kritt-radar/db';
+import { workspaceRoot } from '../../lib/workspace-root';
 import { isDatabaseSetupError } from '../merge-queue/database-setup';
 import { ConsoleNavbar } from '../../components/console-navbar';
 import { listRankedTargets, type RankedTarget, type TargetRankingPage } from '../../lib/target-ranking';
@@ -40,15 +41,13 @@ function formatPool(value: number | null): string {
 }
 
 async function loadWeights() {
-  const workspaceRoot = resolve(process.cwd(), '../..');
-  return parseWeights(await readFile(resolve(workspaceRoot, 'config/weights.yml'), 'utf8'));
+  return parseWeights(await readFile(resolve(workspaceRoot(), 'config/weights.yml'), 'utf8'));
 }
 
 async function loadExclusions() {
-  const workspaceRoot = resolve(process.cwd(), '../..');
   // Missing file means nothing is excluded, which is a safe default: the list
   // gets noisier, never quietly shorter.
-  const text = await readFile(resolve(workspaceRoot, 'config/exclusions.yml'), 'utf8').catch(
+  const text = await readFile(resolve(workspaceRoot(), 'config/exclusions.yml'), 'utf8').catch(
     () => 'owners: []',
   );
   return parseExclusions(text);
