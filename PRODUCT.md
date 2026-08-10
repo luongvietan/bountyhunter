@@ -40,7 +40,13 @@ language or artificial urgency.
 4. **Use familiar controls.** Native forms, links, tabs, and confirmations keep attention on the decision rather than the interface.
 5. **Keep provenance legible.** Every decision should make its aliases, report movement, status, and timestamp understandable.
 
-## Accessibility & Inclusion
+## Automation boundary
+
+The default daily path is `pnpm automate` (or `scripts/automate-scheduled.ps1`):
+sync evidence, auto-merge high-confidence entity candidates, dispatch top targets
+to Open-Kritt, ingest findings, and auto-dismiss clear noise. The operator still
+submits to bounty platforms by hand, settles outcomes, and reviews anything the
+automation left pending or ambiguous.
 
 Target WCAG 2.2 AA. All workflows must be keyboard operable, retain visible
 focus, meet text and control contrast requirements, support reduced motion, and
