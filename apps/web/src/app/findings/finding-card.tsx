@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { decideFinding, type FindingDecisionState } from './actions';
+import { CodeLocationPanel } from './code-location-panel';
 import type { QueuedFinding } from '../../lib/finding-queue';
 
 const initialState: FindingDecisionState = { status: 'idle', message: '' };
@@ -11,6 +12,17 @@ function Reward({ min, max }: { min: number | null; max: number | null }) {
   const fmt = (n: number) => (n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`);
   if (min !== null && max !== null) return <>{`${fmt(min)} – ${fmt(max)}`}</>;
   return <>{fmt((min ?? max)!)}</>;
+}
+
+function IngestBadge({ badge }: { badge: QueuedFinding['ingestBadge'] }) {
+  const labels = {
+    unseen: 'New since ingest',
+    updated: 'Updated since last view',
+    seen: 'Viewed',
+  } as const;
+  return (
+    <span className={`finding-ingest-badge finding-ingest-${badge}`}>{labels[badge]}</span>
+  );
 }
 
 function DecisionButton({
@@ -57,19 +69,19 @@ export function FindingCard({ finding }: { finding: QueuedFinding }) {
     <article className="finding-card">
       <header className="finding-head">
         <div>
-          <h2>{finding.title}</h2>
+          <div className="finding-title-row">
+            <h2>{finding.title}</h2>
+            <IngestBadge badge={finding.ingestBadge} />
+          </div>
           <p className="finding-meta">
             <a href={finding.programUrl} rel="noreferrer" target="_blank">
               {finding.programTitle}
             </a>{' '}
             · {finding.platform} · <code>{finding.repoKey}</code>
-            {finding.filePath ? (
+            {finding.bountyRank !== null ? (
               <>
                 {' · '}
-                <code>
-                  {finding.filePath}
-                  {finding.line ? `:${finding.line}` : ''}
-                </code>
+                <span className="finding-rank">Bounty rank #{finding.bountyRank}</span>
               </>
             ) : null}
           </p>
@@ -88,11 +100,26 @@ export function FindingCard({ finding }: { finding: QueuedFinding }) {
         </dl>
       </header>
 
-      {/* Shown before the controls, never after: the operator should meet the
-          gaps while deciding, not after they have decided. */}
+      {finding.filePath ? (
+        <CodeLocationPanel
+          commitSha={finding.commitSha}
+          filePath={finding.filePath}
+          findingId={finding.id}
+          line={finding.line}
+          permalink={finding.permalink}
+        />
+      ) : null}
+
       {finding.blockers.length > 0 ? (
         <p className="finding-blockers">
           Not ready to submit: {finding.blockers.join(', ')}.
+        </p>
+      ) : null}
+
+      {finding.triageReason ? (
+        <p className="finding-triage-note" role="note">
+          {finding.decidedBy ? `${finding.decidedBy}: ` : ''}
+          {finding.triageReason}
         </p>
       ) : null}
 
@@ -108,7 +135,49 @@ export function FindingCard({ finding }: { finding: QueuedFinding }) {
         <textarea aria-label="Draft report" readOnly rows={18} value={finding.report} />
       </details>
 
+      {finding.krittReport ? (
+        <details className="finding-report">
+          <summary>Report Creator write-up</summary>
+          <textarea
+            aria-label="Report Creator write-up"
+            readOnly
+            rows={18}
+            value={finding.krittReport}
+          />
+        </details>
+      ) : null}
+
+      {finding.pocDiff ? (
+        <details className="finding-report">
+          <summary>Proof of concept diff</summary>
+          <textarea aria-label="Proof of concept diff" readOnly rows={18} value={finding.pocDiff} />
+        </details>
+      ) : null}
+
+      {finding.outcome ? (
+        <p className="finding-outcome">
+          Outcome:{' '}
+          <span className={`result-chip result-${finding.outcome.result}`}>
+            {finding.outcome.result}
+          </span>{' '}
+          {finding.outcome.result === 'pending' ? (
+            <>
+              — record the payout or rejection on the{' '}
+              <a href="/outcomes?result=pending">outcomes page</a>.
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
       <div className="finding-decisions">
+        {finding.status === 'new' || finding.status === 'reviewed' ? (
+          <DecisionButton
+            finding={finding}
+            label="Mark reviewed"
+            status="reviewed"
+            variant="secondary"
+          />
+        ) : null}
         {finding.status !== 'submitted' ? (
           <DecisionButton
             finding={finding}

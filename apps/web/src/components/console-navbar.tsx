@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-export type ConsoleSection = 'targets' | 'merge-queue' | 'outcomes';
+export type ConsoleSection = 'targets' | 'findings' | 'merge-queue' | 'outcomes' | 'health';
 
 interface ConsoleNavbarProps {
   activeSection?: ConsoleSection;
@@ -20,6 +20,9 @@ export function ConsoleNavbar({ activeSection, trailing }: ConsoleNavbarProps) {
           <Link href="/targets" aria-current={activeSection === 'targets' ? 'page' : undefined}>
             Targets
           </Link>
+          <Link href="/findings" aria-current={activeSection === 'findings' ? 'page' : undefined}>
+            Findings
+          </Link>
           <Link
             href="/merge-queue"
             aria-current={activeSection === 'merge-queue' ? 'page' : undefined}
@@ -28,6 +31,9 @@ export function ConsoleNavbar({ activeSection, trailing }: ConsoleNavbarProps) {
           </Link>
           <Link href="/outcomes" aria-current={activeSection === 'outcomes' ? 'page' : undefined}>
             Outcomes
+          </Link>
+          <Link href="/health" aria-current={activeSection === 'health' ? 'page' : undefined}>
+            Health
           </Link>
         </nav>
         {trailing}

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { OutcomeRow } from '../../lib/outcomes';
+import { OutcomeSettleForm } from './outcome-settle-form';
 
 const dateFormatter = new Intl.DateTimeFormat('en', {
   dateStyle: 'medium',
@@ -49,10 +50,14 @@ export function OutcomeHistory({ outcomes }: { outcomes: OutcomeRow[] }) {
             </td>
             <td>
               {outcome.title} <span className="outcome-platform">{outcome.platform}</span>
+              {outcome.findingId ? <span className="outcome-origin">from a finding</span> : null}
             </td>
             <td>{outcome.action}</td>
             <td>
               <span className={`result-chip result-${outcome.result}`}>{outcome.result}</span>
+              {/* A pending row is a submission whose result nobody has entered
+                  yet, and it contributes nothing to correlation until they do. */}
+              {outcome.result === 'pending' ? <OutcomeSettleForm outcomeId={outcome.id} /> : null}
             </td>
             <td className="data-value">{formatPayout(outcome.payoutUsd)}</td>
             <td className="outcome-notes">{outcome.notes ?? '—'}</td>

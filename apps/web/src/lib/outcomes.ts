@@ -20,6 +20,8 @@ export interface OutcomeRow {
   submittedAt: string;
   payoutUsd: number | null;
   notes: string | null;
+  /** Set when a submitted finding opened this row, rather than a person. */
+  findingId: string | null;
 }
 
 export interface ScopeOption {
@@ -101,6 +103,7 @@ export async function listOutcomesPage(
       submittedAt: outcome.submittedAt.toISOString(),
       payoutUsd: toNumber(outcome.payoutUsd),
       notes: outcome.notes,
+      findingId: outcome.findingId,
     })),
     scopeOptions: scopes.map((scope) => ({
       id: scope.id,

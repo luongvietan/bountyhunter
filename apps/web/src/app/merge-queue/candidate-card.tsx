@@ -185,6 +185,11 @@ export function CandidateCard({ candidate }: CandidateCardProps) {
                 {candidate.source?.canonicalName ?? 'Ambiguous entity pair'}
               </h2>
               <span className={`status-chip status-${candidate.status}`}>{candidate.status}</span>
+              {candidate.decidedBy ? (
+                <span className={`decision-actor decision-actor-${candidate.decidedBy}`}>
+                  {candidate.decidedBy}
+                </span>
+              ) : null}
             </div>
             <p className="candidate-id">Candidate {candidate.id}</p>
           </div>
@@ -219,6 +224,12 @@ export function CandidateCard({ candidate }: CandidateCardProps) {
 
         {candidate.status === 'approved' ? (
           <ApprovedEvidence evidence={candidate.approvalEvidence} />
+        ) : null}
+
+        {candidate.decisionNote ? (
+          <p className="decision-note" role="note">
+            <strong>Decision note</strong> {candidate.decisionNote}
+          </p>
         ) : null}
 
         {candidate.blockedReason ? (

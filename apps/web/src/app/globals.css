@@ -427,6 +427,52 @@ summary:focus-visible {
   color: var(--rejected-ink);
 }
 
+.decision-actor {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border-radius: var(--radius-md);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.decision-actor-auto {
+  background: var(--bench);
+  color: var(--ink-secondary);
+}
+
+.decision-actor-ai {
+  background: #e8edf5;
+  color: #1a3a5c;
+}
+
+.decision-actor-operator {
+  background: var(--bench-strong);
+  color: var(--ink-soft);
+}
+
+.decision-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--rule);
+  font-size: 0.875rem;
+  color: var(--ink-secondary);
+}
+
+.finding-triage-note {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bench);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--ink-secondary);
+}
+
 .candidate-id {
   margin: 5px 0 0;
   color: var(--ink-secondary);
@@ -1625,6 +1671,48 @@ summary:focus-visible {
   color: var(--ink-secondary);
 }
 
+/* Marks a row the review queue opened rather than a person, so the two
+   provenances stay distinguishable in the history. */
+.outcome-origin {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-quiet);
+  font-size: 0.7rem;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.outcome-settle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.outcome-settle select,
+.outcome-settle input {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-caption);
+}
+
+.outcome-settle input {
+  width: 10ch;
+}
+
+@media (max-width: 640px) {
+  .outcome-settle select,
+  .outcome-settle input,
+  .outcome-settle button {
+    min-height: 44px;
+  }
+}
+
 .result-chip {
   display: inline-flex;
   align-items: center;
@@ -1878,6 +1966,16 @@ summary:focus-visible {
   font-size: var(--text-caption);
 }
 
+.finding-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
 .finding-reasoning {
   margin: 12px 0 0;
   color: var(--ink-secondary);
@@ -1932,4 +2030,213 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.finding-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.finding-ingest-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+
+.finding-ingest-unseen {
+  background: var(--ember-soft);
+  color: var(--danger-ink);
+}
+
+.finding-ingest-updated {
+  background: color-mix(in srgb, var(--ember) 20%, var(--canvas));
+  color: var(--ink);
+}
+
+.finding-ingest-seen {
+  background: var(--bench-strong);
+  color: var(--ink-secondary);
+}
+
+.finding-rank {
+  font-family: var(--font-mono);
+}
+
+.finding-filters {
+  margin-bottom: 8px;
+}
+
+.finding-code-panel {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--bench);
+}
+
+.finding-code-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.finding-code-head h3 {
+  margin: 0;
+  font-size: var(--text-caption);
+  font-weight: 650;
+}
+
+.finding-code-toggle {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.finding-code-tab {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  background: var(--canvas);
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.finding-code-tab-active {
+  background: var(--ink);
+  color: var(--canvas);
+}
+
+.finding-code-meta {
+  margin: 10px 0 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.finding-code-github a {
+  font-weight: 600;
+}
+
+.finding-code-url {
+  margin: 8px 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  max-width: 70ch;
+}
+
+.finding-code-permalink {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+}
+
+.finding-code-snippet {
+  margin: 12px 0 0;
+  padding: 12px;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+.finding-code-line {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  gap: 12px;
+}
+
+.finding-code-line-focus {
+  background: color-mix(in srgb, var(--ember) 14%, transparent);
+}
+
+.finding-code-gutter {
+  color: var(--ink-secondary);
+  text-align: right;
+  user-select: none;
+}
+
+.finding-code-loading,
+.finding-code-error {
+  margin: 12px 0 0;
+  font-size: var(--text-caption);
+  color: var(--ink-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Health / ops
+   --------------------------------------------------------------------------- */
+
+.health-grid {
+  padding: 0 0 28px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.health-grid h2 {
+  margin: 0 0 12px;
+  font-size: var(--text-body);
+  font-weight: 650;
+}
+
+.health-events {
+  display: grid;
+  gap: 10px 24px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0;
+}
+
+.health-events div {
+  margin: 0;
+}
+
+.health-events dt {
+  margin: 0 0 2px;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  font-weight: 550;
+}
+
+.health-events dd {
+  margin: 0;
+  font-size: var(--text-body);
+}
+
+.health-table {
+  width: 100%;
+}
+
+.health-empty {
+  margin: 0;
+  color: var(--ink-secondary);
+}
+
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-caption);
+  font-weight: 650;
+}
+
+.health-badge-ok {
+  background: color-mix(in srgb, var(--signal-ok) 18%, var(--canvas));
+  color: var(--ink);
+}
+
+.health-badge-down {
+  background: color-mix(in srgb, var(--ember) 16%, var(--canvas));
+  color: var(--ink);
 }

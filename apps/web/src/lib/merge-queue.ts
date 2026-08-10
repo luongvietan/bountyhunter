@@ -48,6 +48,8 @@ export interface QueueCandidate {
   normalizedAliasCount: number;
   createdAt: string;
   decidedAt: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
   source: QueueEntity | null;
   target: QueueEntity | null;
   approvable: boolean;
@@ -279,6 +281,8 @@ export async function listMergeQueue(
         normalizedAliasCount: normalizedAliasCount(rawProjectHints),
         createdAt: candidate.createdAt.toISOString(),
         decidedAt: candidate.decidedAt?.toISOString() ?? null,
+        decidedBy: candidate.decidedBy,
+        decisionNote: candidate.decisionNote,
         source: roles.source,
         target: roles.target,
         approvable: candidateStatus === 'pending' && blockedReason === null,

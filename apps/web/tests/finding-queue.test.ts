@@ -49,4 +49,26 @@ describe('reportBlockers', () => {
     });
     expect(blockers).toHaveLength(4);
   });
+
+  it('accepts a PoC diff in place of a described input', () => {
+    expect(
+      reportBlockers({ ...complete, maliciousInput: null, pocDiff: 'diff --git a/test/E.t.sol' }),
+    ).toEqual([]);
+  });
+
+  it('blocks a finding the scope post-script ruled ineligible', () => {
+    expect(reportBlockers({ ...complete, inScope: false })).toContain(
+      'Attacker is out of scope for this program',
+    );
+  });
+
+  it('blocks a finding the chain could not re-confirm', () => {
+    expect(reportBlockers({ ...complete, postScriptValid: false })).toContain(
+      'Post-script could not confirm the finding',
+    );
+  });
+
+  it('does not block when the chain did not run', () => {
+    expect(reportBlockers({ ...complete, inScope: null, postScriptValid: null })).toEqual([]);
+  });
 });
