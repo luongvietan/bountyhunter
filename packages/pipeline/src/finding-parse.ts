@@ -2,9 +2,23 @@ import { z } from 'zod';
 
 const NumericString = z.union([z.number(), z.string()]).nullish();
 
+/**
+ * One post-script's output for one finding. Kritt reserves `_reserved_report`
+ * and `_reserved_poc`; everything else is whatever the script declared.
+ */
+const Enrichment = z
+  .object({
+    postScriptName: z.string().nullish(),
+    result: z.record(z.unknown()).nullish(),
+    stub: z.boolean().nullish(),
+  })
+  .passthrough();
+
 const RawFinding = z
   .object({
     id: z.union([z.number(), z.string()]),
+    postScriptAnswer: z.record(z.unknown()).nullish(),
+    enrichments: z.array(Enrichment).nullish(),
     rank: z.number().nullish(),
     summary: z.string().nullish(),
     explanation: z.string().nullish(),
@@ -51,6 +65,17 @@ export interface ParsedFinding {
   maxRewardUsd: number | null;
   rankReasoning: string | null;
   clusterId: string | null;
+  /** Markdown write-up from the Report Creator post-script. */
+  krittReport: string | null;
+  /** The PoC Creator's diff, the thing a program actually asks for. */
+  pocDiff: string | null;
+  /** The scope post-script's verdict; null when it did not run or did not answer. */
+  inScope: boolean | null;
+  /** The scope post-script's re-validation of the finding itself. */
+  postScriptValid: boolean | null;
+  /** Verdict from the Finding Triage post-script: review | noise | invalid. */
+  triageVerdict: string | null;
+  triageReason: string | null;
   raw: unknown;
 }
 
@@ -67,6 +92,85 @@ function toBoolean(value: unknown): boolean | null {
     if (['true', 'yes', 'confirmed'].includes(lower)) return true;
     if (['false', 'no'].includes(lower)) return false;
   }
+  return null;
+}
+
+type EnrichmentResult = Record<string, unknown>;
+
+/**
+ * Flatten every post-script result for one finding into a single lookup. Later
+ * scripts in the chain win: the chain runs proof first, so a script that reruns
+ * a key downstream saw more than the one before it.
+ */
+function mergeEnrichments(
+  enrichments: readonly z.infer<typeof Enrichment>[] | null | undefined,
+  postScriptAnswer: EnrichmentResult | null | undefined,
+): EnrichmentResult {
+  const merged: EnrichmentResult = { ...(postScriptAnswer ?? {}) };
+  for (const entry of enrichments ?? []) {
+    // A stub is the post-script reporting it had nothing to say; its keys are
+    // placeholders and would overwrite a real answer from an earlier script.
+    if (entry.stub === true || !entry.result) continue;
+    Object.assign(merged, entry.result);
+  }
+  return merged;
+}
+
+function toMarkdown(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function toVerdict(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toReason(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Read the Finding Triage post-script verdict from merged enrichment output.
+ */
+function readTriageVerdict(
+  enrichments: readonly z.infer<typeof Enrichment>[] | null | undefined,
+  post: EnrichmentResult,
+): string | null {
+  const fromPost =
+    toVerdict(post.triage_verdict) ??
+    toVerdict(post._chip_triage_verdict) ??
+    toVerdict(post.verdict);
+  if (fromPost) return fromPost;
+
+  for (const entry of enrichments ?? []) {
+    if (entry.postScriptName !== 'Finding Triage' || entry.stub === true || !entry.result) continue;
+    const result = entry.result;
+    const verdict =
+      toVerdict(result.triage_verdict) ??
+      toVerdict(result._chip_triage_verdict) ??
+      toVerdict(result.verdict);
+    if (verdict) return verdict;
+  }
+
+  return null;
+}
+
+function readTriageReason(
+  enrichments: readonly z.infer<typeof Enrichment>[] | null | undefined,
+  post: EnrichmentResult,
+): string | null {
+  const fromPost = toReason(post.triage_reason);
+  if (fromPost) return fromPost;
+
+  for (const entry of enrichments ?? []) {
+    if (entry.postScriptName !== 'Finding Triage' || entry.stub === true || !entry.result) continue;
+    const reason = toReason((entry.result as EnrichmentResult).triage_reason);
+    if (reason) return reason;
+  }
+
   return null;
 }
 
@@ -96,6 +200,8 @@ export function parseFindings(raw: unknown): ParsedFinding[] {
     const title = (f.summary ?? f.explanation ?? '').trim();
     if (title.length === 0) continue;
 
+    const post = mergeEnrichments(f.enrichments, f.postScriptAnswer);
+
     out.push({
       krittVulnId: String(f.id),
       rank: f.rank ?? null,
@@ -117,6 +223,12 @@ export function parseFindings(raw: unknown): ParsedFinding[] {
       maxRewardUsd: toNumber(f.bountyRank?.maximumReward),
       rankReasoning: f.bountyRank?.reasoning ?? null,
       clusterId: f.dedupe?.clusterId ?? null,
+      krittReport: toMarkdown(post._reserved_report),
+      pocDiff: toMarkdown(post._reserved_poc),
+      inScope: toBoolean(post._chip_is_in_scope),
+      postScriptValid: toBoolean(post.is_valid),
+      triageVerdict: readTriageVerdict(f.enrichments, post),
+      triageReason: readTriageReason(f.enrichments, post),
       raw: item,
     });
   }

@@ -106,6 +106,86 @@ describe('parseFindings', () => {
   });
 });
 
+describe('post-script enrichment', () => {
+  const chain = (results: Array<Record<string, unknown>>) =>
+    finding({
+      enrichments: results.map((result, i) => ({
+        postScriptName: `script-${i}`,
+        result,
+        stub: false,
+      })),
+    });
+
+  it('reads the report, the proof, and the scope verdict off the chain', () => {
+    const [f] = parseFindings([
+      chain([
+        { _reserved_poc: 'diff --git a/test/Exploit.t.sol' },
+        { _reserved_report: '# Reentrancy in withdraw' },
+        { _chip_is_in_scope: true, is_valid: true },
+      ]),
+    ]);
+
+    expect(f!.pocDiff).toBe('diff --git a/test/Exploit.t.sol');
+    expect(f!.krittReport).toBe('# Reentrancy in withdraw');
+    expect(f!.inScope).toBe(true);
+    expect(f!.postScriptValid).toBe(true);
+  });
+
+  it('records an out-of-scope verdict rather than dropping it', () => {
+    const [f] = parseFindings([chain([{ _chip_is_in_scope: false, is_valid: true }])]);
+    expect(f!.inScope).toBe(false);
+    expect(f!.postScriptValid).toBe(true);
+  });
+
+  it('reads the boolean words an agent writes instead of a JSON boolean', () => {
+    const [f] = parseFindings([chain([{ _chip_is_in_scope: 'no', is_valid: 'confirmed' }])]);
+    expect(f!.inScope).toBe(false);
+    expect(f!.postScriptValid).toBe(true);
+  });
+
+  it('ignores a stub, so a script with nothing to say cannot blank an earlier answer', () => {
+    const [f] = parseFindings([
+      finding({
+        enrichments: [
+          { postScriptName: 'PoC Creator', result: { _reserved_poc: 'diff' }, stub: false },
+          { postScriptName: 'Report Creator', result: { _reserved_poc: '' }, stub: true },
+        ],
+      }),
+    ]);
+    expect(f!.pocDiff).toBe('diff');
+  });
+
+  it('treats an empty string as nothing produced', () => {
+    const [f] = parseFindings([chain([{ _reserved_poc: '   ', _reserved_report: '' }])]);
+    expect(f!.pocDiff).toBeNull();
+    expect(f!.krittReport).toBeNull();
+  });
+
+  it('leaves every field null when no post-script ran', () => {
+    const [f] = parseFindings([finding()]);
+    expect(f!.pocDiff).toBeNull();
+    expect(f!.krittReport).toBeNull();
+    expect(f!.inScope).toBeNull();
+    expect(f!.postScriptValid).toBeNull();
+  });
+
+  it('still reads the single postScriptAnswer Kritt returns for a one-script scan', () => {
+    const [f] = parseFindings([finding({ postScriptAnswer: { _reserved_report: '# Report' } })]);
+    expect(f!.krittReport).toBe('# Report');
+  });
+
+  it('reads the Finding Triage verdict from enrichments', () => {
+    const [f] = parseFindings([
+      finding({
+        enrichments: [
+          { postScriptName: 'Finding Triage', result: { triage_verdict: 'noise' }, stub: false },
+        ],
+      }),
+    ]);
+    expect(f!.triageVerdict).toBe('noise');
+  });
+});
+
 describe('isReviewable', () => {
   it('keeps a confirmed or undetermined finding', () => {
     expect(isReviewable(parseFindings([finding({ exploitable: true })])[0]!)).toBe(true);

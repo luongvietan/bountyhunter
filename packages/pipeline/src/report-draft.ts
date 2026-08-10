@@ -31,11 +31,22 @@ export function reportFormatFor(platform: string): ReportFormat {
   return 'generic';
 }
 
-function permalink(target: ReportTarget, finding: ReportFinding): string | null {
+function permalink(
+  target: ReportTarget,
+  finding: Pick<ReportFinding, 'filePath' | 'line'>,
+): string | null {
   if (!finding.filePath) return null;
   const ref = target.commitSha ?? 'HEAD';
   const anchor = finding.line ? `#L${finding.line}` : '';
   return `https://${target.repoKey}/blob/${ref}/${finding.filePath}${anchor}`;
+}
+
+/** GitHub blob URL for a finding location. */
+export function findingPermalink(
+  target: ReportTarget,
+  finding: Pick<ReportFinding, 'filePath' | 'line'>,
+): string | null {
+  return permalink(target, finding);
 }
 
 function location(finding: ReportFinding): string {
