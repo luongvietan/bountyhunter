@@ -175,7 +175,12 @@ export type GithubJsonFetcher = (
   options: GithubRequestOptions,
 ) => Promise<unknown>;
 
-const rateLimit = { rps: 2, burst: 5 };
+const unauthenticatedRateLimit = { rps: 2, burst: 5 };
+const authenticatedRateLimit = { rps: 5, burst: 10 };
+
+function githubRateLimit(token?: string) {
+  return token ? authenticatedRateLimit : unauthenticatedRateLimit;
+}
 
 const defaultGithubJsonFetcher: GithubJsonFetcher = (url, options) =>
   fetchJson<unknown>(url, options);
@@ -223,7 +228,7 @@ export function makeGithubRepoSnapshots(
   return {
     id: 'github-repo-snapshot',
     cadence: '0 */6 * * *',
-    rateLimit,
+    rateLimit: authenticatedRateLimit,
     requiresCredential: 'GITHUB_TOKEN',
     async *fetch(ctx: FetchCtx): AsyncIterable<RawObservation<RepoSnapshotPayload>> {
       const targets = await listTargets();
@@ -245,7 +250,7 @@ export function makeGithubRepoSnapshots(
 
         try {
           const apiBase = repoApiBase(target.repoKey);
-          const options = { limit: rateLimit, headers };
+          const options = { limit: githubRateLimit(ctx.env.GITHUB_TOKEN), headers };
           head = parseHead(
             await requestJson(`${apiBase}/commits/HEAD`, options),
           );

@@ -73,7 +73,12 @@ export function parseCommits(raw: unknown): CommitRecord[] {
   return out;
 }
 
-const rateLimit = { rps: 2, burst: 5 };
+const unauthenticatedRateLimit = { rps: 2, burst: 5 };
+const authenticatedRateLimit = { rps: 5, burst: 10 };
+
+function githubRateLimit(token?: string) {
+  return token ? authenticatedRateLimit : unauthenticatedRateLimit;
+}
 
 /**
  * Lấy commit của các repo đã biết.
@@ -85,7 +90,7 @@ export function makeGithubRepoActivity(
   return {
     id: 'github-repo-activity',
     cadence: '0 */6 * * *',
-    rateLimit,
+    rateLimit: authenticatedRateLimit,
     requiresCredential: 'GITHUB_TOKEN',
     async *fetch(ctx: FetchCtx): AsyncIterable<RawObservation<RepoActivityPayload>> {
       const token = ctx.env.GITHUB_TOKEN;
@@ -96,7 +101,7 @@ export function makeGithubRepoActivity(
         if (!owner || !name) continue;
         const url = `https://api.github.com/repos/${owner}/${name}/commits?per_page=100`;
         const raw = await fetchJson<unknown>(url, {
-          limit: rateLimit,
+          limit: githubRateLimit(token),
           headers: {
             accept: 'application/vnd.github+json',
             ...(token ? { authorization: `Bearer ${token}` } : {}),
