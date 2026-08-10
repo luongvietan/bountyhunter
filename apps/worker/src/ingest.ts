@@ -1,15 +1,19 @@
 import type { Prisma, PrismaClient } from '@kritt-radar/db';
-import { KrittClient, parseFindings, type ParsedFinding } from '@kritt-radar/pipeline';
-
-/** Kritt statuses that mean the scan will produce nothing further. */
-const TERMINAL_STATUSES = new Set(['completed', 'complete', 'finished', 'done', 'failed', 'error', 'cancelled', 'canceled']);
-const FAILED_STATUSES = new Set(['failed', 'error', 'cancelled', 'canceled']);
+import {
+  KrittClient,
+  parseFindings,
+  classifyKrittScanStatus,
+  autoTriageEnabled,
+  triageDismissVerdict,
+  type ParsedFinding,
+} from '@kritt-radar/pipeline';
 
 export interface IngestResult {
   polled: number;
   finished: number;
   stillRunning: number;
   findingsStored: number;
+  autoDismissed: number;
   errors: number;
 }
 
@@ -21,11 +25,22 @@ async function storeFindings(
   prisma: PrismaClient,
   dispatchId: string,
   findings: readonly ParsedFinding[],
-): Promise<number> {
+): Promise<{ stored: number; autoDismissed: number }> {
   let stored = 0;
+  let autoDismissed = 0;
+  const applyTriage = autoTriageEnabled();
+  const dryRun = process.env.RADAR_AUTOMATE_DRY_RUN === 'true';
 
   for (const finding of findings) {
-    const data = {
+    const triage = applyTriage ? triageDismissVerdict(finding) : { dismiss: false, decidedBy: null, reason: null };
+    const now = new Date();
+
+    const existing = await prisma.finding.findUnique({
+      where: { dispatchId_krittVulnId: { dispatchId, krittVulnId: finding.krittVulnId } },
+      select: { status: true },
+    });
+
+    const baseData = {
       rank: finding.rank,
       title: finding.title,
       vulnerabilityType: finding.vulnerabilityType,
@@ -43,29 +58,58 @@ async function storeFindings(
       maxRewardUsd: decimal(finding.maxRewardUsd),
       rankReasoning: finding.rankReasoning,
       clusterId: finding.clusterId,
+      krittReport: finding.krittReport,
+      pocDiff: finding.pocDiff,
+      inScope: finding.inScope,
+      postScriptValid: finding.postScriptValid,
       raw: finding.raw as Prisma.InputJsonValue,
     };
 
+    const canAutoDismiss = applyTriage && triage.dismiss && (!existing || existing.status === 'new');
+
+    if (dryRun && canAutoDismiss) {
+      console.log(
+        `[ingest] dry-run would dismiss ${finding.krittVulnId} (${triage.decidedBy}): ${triage.reason}`,
+      );
+      autoDismissed += 1;
+      stored += 1;
+      continue;
+    }
+
     await prisma.finding.upsert({
       where: { dispatchId_krittVulnId: { dispatchId, krittVulnId: finding.krittVulnId } },
-      create: { dispatchId, krittVulnId: finding.krittVulnId, ...data },
-      // Never touch `status` on update: a finding the operator already
-      // dismissed or submitted must not return to the queue because a later
-      // poll re-read the same scan.
-      update: data,
+      create: {
+        dispatchId,
+        krittVulnId: finding.krittVulnId,
+        ...baseData,
+        status: canAutoDismiss ? 'dismissed' : 'new',
+        decidedAt: canAutoDismiss ? now : null,
+        decidedBy: canAutoDismiss ? triage.decidedBy : null,
+        triageReason: canAutoDismiss ? triage.reason : null,
+      },
+      update: {
+        ...baseData,
+        fetchedAt: new Date(),
+        ...(canAutoDismiss
+          ? {
+              status: 'dismissed',
+              decidedAt: now,
+              decidedBy: triage.decidedBy,
+              triageReason: triage.reason,
+            }
+          : {}),
+      },
     });
+
+    if (canAutoDismiss) autoDismissed += 1;
     stored += 1;
   }
 
-  return stored;
+  return { stored, autoDismissed };
 }
 
 /**
  * Poll dispatched scans and pull their findings in.
- *
- * Findings land with status `new` and stay there. Nothing in this file sends
- * anything to a bounty platform; the queue exists so a person decides what is
- * worth submitting.
  */
 export async function ingestFindings(
   prisma: PrismaClient,
@@ -81,6 +125,7 @@ export async function ingestFindings(
     finished: 0,
     stillRunning: 0,
     findingsStored: 0,
+    autoDismissed: 0,
     errors: 0,
   };
 
@@ -88,32 +133,36 @@ export async function ingestFindings(
     const scanId = dispatch.krittScanId!;
     try {
       const { status } = await client.scanStatus(scanId);
-      const normalized = status.trim().toLowerCase();
+      const phase = classifyKrittScanStatus(status);
 
-      if (!TERMINAL_STATUSES.has(normalized)) {
+      if (phase === 'running') {
         result.stillRunning += 1;
         continue;
       }
 
-      if (FAILED_STATUSES.has(normalized)) {
+      if (phase === 'failed') {
         await prisma.scanDispatch.update({
           where: { id: dispatch.id },
-          data: { status: 'error', error: `Kritt scan ${normalized}`, finishedAt: new Date() },
+          data: {
+            status: 'error',
+            error: `Kritt scan ${status.trim().toLowerCase()}`,
+            finishedAt: new Date(),
+          },
         });
         result.errors += 1;
         continue;
       }
 
       const findings = parseFindings(await client.scanVulnerabilities(scanId));
-      result.findingsStored += await storeFindings(prisma, dispatch.id, findings);
+      const stored = await storeFindings(prisma, dispatch.id, findings);
+      result.findingsStored += stored.stored;
+      result.autoDismissed += stored.autoDismissed;
       await prisma.scanDispatch.update({
         where: { id: dispatch.id },
         data: { status: 'complete', finishedAt: new Date() },
       });
       result.finished += 1;
     } catch (error) {
-      // A network blip must not mark a scan failed: it stays `running` and the
-      // next poll tries again.
       result.errors += 1;
       await prisma.scanDispatch.update({
         where: { id: dispatch.id },
@@ -126,9 +175,13 @@ export async function ingestFindings(
 }
 
 export function formatIngest(result: IngestResult): string {
+  const triageLine =
+    result.autoDismissed > 0
+      ? `, ${result.autoDismissed} auto-dismissed`
+      : '';
   return (
     `[ingest] polled ${result.polled} running scans: ` +
     `${result.finished} finished, ${result.stillRunning} still running, ${result.errors} errored\n` +
-    `[ingest] ${result.findingsStored} findings stored, awaiting review`
+    `[ingest] ${result.findingsStored} findings stored${triageLine}, awaiting review`
   );
 }

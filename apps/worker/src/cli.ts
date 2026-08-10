@@ -23,10 +23,21 @@ import {
   rankScopes,
   KrittClient,
   DEFAULT_KRITT_API_URL,
+  SOLIDITY_WORKFLOW_NAME,
+  parsePostScriptChain,
+  parseWorkflowBlueprint,
+  parsePostScriptBlueprint,
+  selectPostScriptByName,
+  resolvePostScriptChain,
+  selectWorkflowByName,
   type ScopeSignals,
 } from '@kritt-radar/pipeline';
-import { collectCandidates, dispatchScans, formatPlan } from './dispatch.js';
+import { collectCandidates, dispatchScans, formatPlan, type DispatchConfig } from './dispatch.js';
 import { formatIngest, ingestFindings } from './ingest.js';
+import { recordOpsEvent } from './ops-event.js';
+import { formatRetry, retryFailedDispatches, type RetryConfig } from './retry.js';
+import { runAutomatePhases, type AutomateOptions } from './automate.js';
+import { watchScans } from './watch.js';
 import {
   countDroppedContestPrograms,
   listRepoTargets,
@@ -53,11 +64,6 @@ export interface SyncDependencies {
   rank: () => Promise<unknown>;
 }
 
-/**
- * Run each stage in dependency order. Collector statuses, including `partial`
- * and `error`, are recorded results and do not interrupt later materialization;
- * a rejected stage is a hard infrastructure error and aborts the sync.
- */
 export async function sync(deps: SyncDependencies): Promise<void> {
   await deps.collectCatalog();
   await deps.materializeCatalog();
@@ -150,50 +156,282 @@ async function materializeSignals(): Promise<void> {
 }
 
 async function loadExclusions() {
-  // A missing file excludes nothing: the target list gets noisier, never
-  // quietly shorter.
   return parseExclusions(
     await readFile(resolve(ROOT, 'config/exclusions.yml'), 'utf8').catch(() => 'owners: []'),
   );
 }
 
-async function dispatch(argv: readonly string[]): Promise<void> {
-  const weights = parseWeights(await readFile(resolve(ROOT, 'config/weights.yml'), 'utf8'));
-  const config = {
-    // Kritt runs scans one at a time, so a queue of three is roughly a day of
-    // work and a misconfigured run cannot empty a budget.
+function krittBaseUrl(): string {
+  return process.env.KRITT_API_URL ?? DEFAULT_KRITT_API_URL;
+}
+
+function dispatchConfig(apply: boolean): DispatchConfig {
+  const config: DispatchConfig = {
     maxScans: Number(process.env.KRITT_MAX_SCANS ?? 3),
     workflowId: process.env.KRITT_WORKFLOW_ID ?? '',
     postScriptId: process.env.KRITT_POST_SCRIPT_ID ?? '',
-    apply: argv.includes('--apply'),
+    postScriptIds: [],
+    model: process.env.KRITT_MODEL ?? 'gpt-5.6-sol',
+    harness: process.env.KRITT_HARNESS ?? 'codex',
+    modelProvider: process.env.KRITT_MODEL_PROVIDER ?? 'codex',
+    thinkingEffort: process.env.KRITT_THINKING_EFFORT ?? 'medium',
+    severityRanker: process.env.KRITT_SEVERITY_RANKER ?? '',
+    scopeFileLimit: Number(process.env.KRITT_SCOPE_FILE_LIMIT ?? 40),
+    apply,
   };
-
-  if (config.apply && (!config.workflowId || !config.postScriptId)) {
-    throw new Error(
-      'Set KRITT_WORKFLOW_ID and KRITT_POST_SCRIPT_ID before dispatching; Kritt requires both.',
-    );
-  }
-
-  const client = new KrittClient({ baseUrl: process.env.KRITT_API_URL ?? DEFAULT_KRITT_API_URL });
-  if (config.apply && !(await client.health())) {
-    throw new Error(
-      `Open-Kritt is not reachable at ${process.env.KRITT_API_URL ?? DEFAULT_KRITT_API_URL}.`,
-    );
-  }
-
-  const candidates = await collectCandidates(prisma, weights, await loadExclusions(), new Date());
-  const result = await dispatchScans(prisma, client, candidates, config);
-  console.log(formatPlan(result, config));
+  const rankerId = process.env.KRITT_SEVERITY_RANKER_ID;
+  if (rankerId) config.severityRankerId = rankerId;
+  return config;
 }
 
-async function ingest(): Promise<void> {
-  const client = new KrittClient({ baseUrl: process.env.KRITT_API_URL ?? DEFAULT_KRITT_API_URL });
+function retryConfig(apply = true): RetryConfig {
+  const base = dispatchConfig(apply);
+  const config: RetryConfig = { ...base };
+  const fallbackModel = process.env.KRITT_FALLBACK_MODEL;
+  const fallbackHarness = process.env.KRITT_FALLBACK_HARNESS;
+  const fallbackModelProvider = process.env.KRITT_FALLBACK_MODEL_PROVIDER;
+  const fallbackThinkingEffort = process.env.KRITT_FALLBACK_THINKING_EFFORT;
+  if (fallbackModel) config.fallbackModel = fallbackModel;
+  if (fallbackHarness) config.fallbackHarness = fallbackHarness;
+  if (fallbackModelProvider) config.fallbackModelProvider = fallbackModelProvider;
+  if (fallbackThinkingEffort) config.fallbackThinkingEffort = fallbackThinkingEffort;
+  return config;
+}
+
+async function assertKrittReachable(client: KrittClient): Promise<void> {
   if (!(await client.health())) {
-    throw new Error(
-      `Open-Kritt is not reachable at ${process.env.KRITT_API_URL ?? DEFAULT_KRITT_API_URL}.`,
-    );
+    throw new Error(`Open-Kritt is not reachable at ${krittBaseUrl()}.`);
   }
-  console.log(formatIngest(await ingestFindings(prisma, client)));
+}
+
+function workflowName(): string {
+  return process.env.KRITT_WORKFLOW_NAME?.trim() || SOLIDITY_WORKFLOW_NAME;
+}
+
+async function readWorkflowBlueprint() {
+  return parseWorkflowBlueprint(
+    await readFile(resolve(ROOT, 'config/kritt/solidity-defi-workflow.json'), 'utf8'),
+  );
+}
+
+async function readFindingTriageBlueprint() {
+  return parsePostScriptBlueprint(
+    await readFile(resolve(ROOT, 'config/kritt/finding-triage-post-script.json'), 'utf8'),
+  );
+}
+
+/**
+ * Resolve the workflow and post-script chain Kritt should run. Ids are looked up
+ * by name on every run: an operator who reinstalls Kritt gets new ids, and a
+ * stale id in the environment would otherwise dispatch the wrong prompt.
+ */
+async function resolveKrittSelection<T extends DispatchConfig>(
+  client: KrittClient,
+  config: T,
+): Promise<T> {
+  const resolved = { ...config };
+
+  if (!resolved.workflowId) {
+    const name = workflowName();
+    const workflow = selectWorkflowByName(await client.listWorkflows(), name);
+    if (!workflow) {
+      throw new Error(
+        `Open-Kritt has no workflow named "${name}". Run \`pnpm provision\` to install it, ` +
+          'or set KRITT_WORKFLOW_ID to pin one that already exists.',
+      );
+    }
+    resolved.workflowId = workflow.id;
+  }
+
+  const chain = parsePostScriptChain(process.env.KRITT_POST_SCRIPT_CHAIN);
+  resolved.postScriptIds = resolvePostScriptChain(await client.listPostScripts(), chain);
+  // Kritt still requires the scalar and runs it first, so the chain's head has
+  // to be the one that builds the proof the later scripts describe.
+  resolved.postScriptId = process.env.KRITT_POST_SCRIPT_ID?.trim() || resolved.postScriptIds[0]!;
+  if (!resolved.postScriptIds.includes(resolved.postScriptId)) {
+    resolved.postScriptIds = [resolved.postScriptId, ...resolved.postScriptIds];
+  }
+
+  return resolved;
+}
+
+/**
+ * Install the Solidity/DeFi workflow and report the post-script chain. Safe to
+ * re-run: a workflow of the same name is reused rather than duplicated, because
+ * Kritt refuses to edit a workflow any scan has already used.
+ */
+async function provision(): Promise<void> {
+  const client = new KrittClient({ baseUrl: krittBaseUrl() });
+  await assertKrittReachable(client);
+
+  const blueprint = await readWorkflowBlueprint();
+  const existing = selectWorkflowByName(await client.listWorkflows(), blueprint.name);
+  const workflow = existing ?? (await client.createWorkflow(blueprint));
+  console.log(
+    `[provision] workflow ${existing ? 'already installed' : 'created'}: ` +
+      `${workflow.name} (id ${workflow.id})`,
+  );
+
+  const triageBlueprint = await readFindingTriageBlueprint();
+  const installedScripts = await client.listPostScripts();
+  const triageExisting = selectPostScriptByName(installedScripts, triageBlueprint.name);
+  const triageScript =
+    triageExisting ?? (await client.createPostScript(triageBlueprint));
+  console.log(
+    `[provision] post-script ${triageExisting ? 'already installed' : 'created'}: ` +
+      `${triageScript.name} (id ${triageScript.id})`,
+  );
+
+  const chain = parsePostScriptChain(process.env.KRITT_POST_SCRIPT_CHAIN);
+  const ids = resolvePostScriptChain(await client.listPostScripts(), chain);
+  console.log(
+    `[provision] post-script chain: ${chain.map((name, i) => `${name} (id ${ids[i]})`).join(' -> ')}`,
+  );
+  console.log(
+    '[provision] dispatch resolves both by name on every run; ' +
+      'set KRITT_WORKFLOW_ID or KRITT_POST_SCRIPT_ID only to pin something else.',
+  );
+}
+
+async function dispatch(argv: readonly string[]): Promise<void> {
+  const weights = parseWeights(await readFile(resolve(ROOT, 'config/weights.yml'), 'utf8'));
+  let config = dispatchConfig(argv.includes('--apply'));
+
+  const client = new KrittClient({ baseUrl: krittBaseUrl() });
+  if (config.apply) {
+    await assertKrittReachable(client);
+    config = await resolveKrittSelection(client, config);
+  }
+
+  const candidates = await collectCandidates(
+    prisma,
+    weights,
+    await loadExclusions(),
+    new Date(),
+    config.scopeFileLimit,
+  );
+  const result = await dispatchScans(prisma, client, candidates, config);
+  console.log(formatPlan(result, config));
+
+  if (config.apply) {
+    await recordOpsEvent(prisma, 'dispatch', result.failed > 0 ? 'error' : 'ok', undefined, {
+      dispatched: result.dispatched,
+      failed: result.failed,
+      selected: result.plan.selected.length,
+    });
+  }
+}
+
+async function ingest(argv: readonly string[]): Promise<void> {
+  const client = new KrittClient({ baseUrl: krittBaseUrl() });
+  await assertKrittReachable(client);
+  const config = await resolveKrittSelection(client, retryConfig(false));
+
+  if (argv.includes('--watch')) {
+    await watchScans(prisma, client, config);
+    return;
+  }
+
+  const ingestResult = await ingestFindings(prisma, client);
+  const retryResult = await retryFailedDispatches(prisma, client, config);
+  console.log(formatIngest(ingestResult));
+  if (retryResult.attempted > 0) console.log(formatRetry(retryResult));
+
+  await recordOpsEvent(prisma, 'ingest', ingestResult.errors > 0 ? 'error' : 'ok', undefined, {
+    ingest: ingestResult,
+    retry: retryResult,
+  });
+}
+
+async function watchWithTimeout(): Promise<void> {
+  const client = new KrittClient({ baseUrl: krittBaseUrl() });
+  await assertKrittReachable(client);
+  const intervalMs = Number(process.env.KRITT_WATCH_INTERVAL_MS ?? 30_000);
+  const timeoutMs = Number(process.env.RADAR_AUTOMATE_WATCH_TIMEOUT_MS ?? 25 * 60 * 1000);
+  const maxIterations = Math.max(1, Math.ceil(timeoutMs / intervalMs));
+  await watchScans(prisma, client, await resolveKrittSelection(client, retryConfig(false)), {
+    intervalMs,
+    maxIterations,
+  });
+}
+
+function parseAutomateOptions(argv: readonly string[]): AutomateOptions {
+  const fast = argv.includes('--fast') || process.env.RADAR_AUTOMATE_FAST === 'true';
+  if (argv.includes('--skip-sync')) {
+    return {
+      skipManualPrograms: fast || argv.includes('--skip-manual-programs'),
+      syncMode: 'skip',
+      watchMode: fast ? 'once' : argv.includes('--skip-watch') ? 'skip' : 'full',
+    };
+  }
+  if (fast) {
+    return {
+      skipManualPrograms: true,
+      syncMode: 'lite',
+      watchMode: 'once',
+    };
+  }
+  return {
+    skipManualPrograms: argv.includes('--skip-manual-programs'),
+    syncMode: 'full',
+    watchMode: argv.includes('--skip-watch') ? 'skip' : 'full',
+  };
+}
+
+async function automate(argv: readonly string[] = []): Promise<void> {
+  const opts = parseAutomateOptions(argv);
+  if (opts.syncMode === 'lite') {
+    console.log('[automate] fast sync: materialize signals + rank only');
+  }
+  if (opts.watchMode === 'once') {
+    console.log('[automate] fast watch: single ingest pass');
+  }
+
+  try {
+    const phases = await runAutomatePhases(
+      prisma,
+      {
+        sync: async () => {
+          if (opts.syncMode === 'lite') {
+            await materializeSignals();
+            await rank();
+            return;
+          }
+          await sync(runtimeDependencies);
+        },
+        dispatchApply: async () => {
+          await dispatch(['--apply']);
+        },
+        watch: opts.watchMode === 'once' ? async () => ingest([]) : watchWithTimeout,
+        loadExclusionsYaml: async () =>
+          readFile(resolve(ROOT, 'config/exclusions.yml'), 'utf8').catch(() => 'owners: []'),
+      },
+      opts,
+    );
+    const ok = phases.sync !== 'error' && phases.dispatch !== 'error';
+    await recordOpsEvent(prisma, 'automate', ok ? 'ok' : 'error', undefined, {
+      ...phases,
+      mode: opts.syncMode === 'lite' || opts.watchMode === 'once' ? 'fast' : 'full',
+    });
+    console.log(
+      `[automate] complete manual=${phases.manualPrograms} sync=${phases.sync} ` +
+        `dispatch=${phases.dispatch} watch=${phases.watch}`,
+    );
+  } catch (error) {
+    await recordOpsEvent(
+      prisma,
+      'automate',
+      'error',
+      error instanceof Error ? error.message : String(error),
+    );
+    throw error;
+  }
+}
+
+async function watch(): Promise<void> {
+  const client = new KrittClient({ baseUrl: krittBaseUrl() });
+  await assertKrittReachable(client);
+  await watchScans(prisma, client, await resolveKrittSelection(client, retryConfig(false)));
 }
 
 async function rank(): Promise<void> {
@@ -241,14 +479,30 @@ async function runCommand(command: string | undefined): Promise<void> {
   else if (command === 'materialize-catalog' || command === 'materialize') await materializeCatalog();
   else if (command === 'collect-github') await collectGithub();
   else if (command === 'materialize-signals') await materializeSignals();
-  else if (command === 'sync') await sync(runtimeDependencies);
+  else if (command === 'sync') {
+    try {
+      await sync(runtimeDependencies);
+      await recordOpsEvent(prisma, 'sync', 'ok');
+    } catch (error) {
+      await recordOpsEvent(
+        prisma,
+        'sync',
+        'error',
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
+  } else if (command === 'provision') await provision();
+  else if (command === 'automate') await automate(process.argv.slice(3));
   else if (command === 'dispatch') await dispatch(process.argv.slice(3));
-  else if (command === 'ingest') await ingest();
+  else if (command === 'ingest') await ingest(process.argv.slice(3));
+  else if (command === 'watch') await watch();
   else if (command === 'rank') await rank();
   else {
     console.error(
-      'usage: cli.ts <collect-catalog|materialize-catalog|collect-github|materialize-signals|sync|rank>\n' +
-        'compatibility aliases: collect=collect-catalog, materialize=materialize-catalog',
+      'usage: cli.ts <collect-catalog|materialize-catalog|collect-github|materialize-signals|sync|rank|provision|automate|dispatch|ingest|watch>\n' +
+        'compatibility aliases: collect=collect-catalog, materialize=materialize-catalog\n' +
+        'flags: dispatch --apply, ingest --watch, automate --fast [--skip-sync] [--skip-watch] [--skip-manual-programs]',
     );
     process.exitCode = 1;
   }

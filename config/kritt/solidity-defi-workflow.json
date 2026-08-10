@@ -1,0 +1,71 @@
+{
+  "name": "Solidity DeFi Value Flow",
+  "description": "Follows attacker-controlled input through on-chain value movement and accounting on Solidity targets. Replaces external-flow-analysis for smart-contract scopes, where the general workflow spends its budget on browser and message-passing surfaces that no DeFi program pays for.",
+  "levels": [
+    {
+      "depth": 0,
+      "multiOutput": true,
+      "outputFormat": {
+        "sol_entry_contract": "string",
+        "sol_entry_function": "string",
+        "sol_entry_signature": "string",
+        "sol_entry_file_path": "string",
+        "sol_entry_line": "number",
+        "sol_entry_access_control": "string",
+        "sol_entry_caller": "string",
+        "sol_entry_value_moved": "string",
+        "sol_entry_state_touched": "array",
+        "sol_entry_reachability_evidence": "array"
+      },
+      "steps": [
+        {
+          "name": "Enumerate value-bearing entrypoints",
+          "content": "You are auditing the Solidity codebase {{repo_full}} at commit {{commit_sha}}.\n\nWorkspace root: {{workspace_root}}\nWorkspace layout: {{workspace_layout}}\nIn-scope focus: {{repo_scope}}\nScan configuration: {{configuration}}\n\nEnumerate every externally reachable entrypoint that can move value or change accounting state. An entrypoint qualifies when all of the following hold:\n\n1. It is a `public` or `external` function, a `fallback`/`receive`, or a callback the contract exposes to an external protocol (flash-loan callbacks, ERC-777/ERC-721/ERC-1155 hooks, router callbacks, governance executors, cross-chain message handlers).\n2. It is reachable in a deployed configuration: reached through the production entrypoint, a proxy's implementation, or a module wired into a live registry. Prove the wiring by reading the deployment or initialization code, not by assuming it.\n3. Executing it moves tokens or native currency, mints or burns shares or debt, updates balances, collateral, reserves, or fees, or changes a parameter that later arithmetic reads.\n\nExclude view and pure functions with no state effect, test and script contracts (`test/`, `script/`, `mocks/`), and vendored dependencies unless the in-scope focus names them.\n\nFor each entrypoint report:\n- sol_entry_contract: the contract name.\n- sol_entry_function: the function, fallback, receive, or hook name.\n- sol_entry_signature: the full Solidity signature including parameter types and mutability.\n- sol_entry_file_path: path relative to the workspace root.\n- sol_entry_line: the line the declaration starts on.\n- sol_entry_access_control: every modifier, role check, or `require` on `msg.sender` that gates the call, quoted from source. Write \"none\" when the function is permissionless.\n- sol_entry_caller: who can actually reach it in production — anyone, a holder of a named role, another in-scope contract, or governance.\n- sol_entry_value_moved: the assets or accounting quantities the call can change.\n- sol_entry_state_touched: the storage variables written, as an array of `Contract.variable` strings.\n- sol_entry_reachability_evidence: an array of `file:line` references proving the entrypoint is wired into the deployed system.\n\nReport only entrypoints you verified against the source. Do not invent addresses, roles, or deployment facts."
+        }
+      ]
+    },
+    {
+      "depth": 1,
+      "multiOutput": true,
+      "outputFormat": {
+        "sol_flow_summary": "string",
+        "sol_flow_trace": "array",
+        "sol_flow_file_path": "string",
+        "sol_flow_line": "number",
+        "sol_flow_invariant": "string",
+        "sol_flow_accounting": "string",
+        "sol_flow_external_calls": "array",
+        "sol_flow_price_inputs": "array",
+        "sol_flow_attacker_control": "string",
+        "sol_flow_atomicity": "string"
+      },
+      "steps": [
+        {
+          "name": "Trace value and accounting paths",
+          "content": "Entrypoint under review: {{sol_entry_contract}}.{{sol_entry_function}} — {{sol_entry_signature}}\nDeclared at {{sol_entry_file_path}}:{{sol_entry_line}}\nAccess control: {{sol_entry_access_control}}\nReachable by: {{sol_entry_caller}}\nValue moved: {{sol_entry_value_moved}}\nState touched: {{sol_entry_state_touched}}\nReachability evidence: {{sol_entry_reachability_evidence}}\n\nRepository {{repo_full}} at {{commit_sha}}, rooted at {{workspace_root}}.\n\nEnumerate the materially different execution paths through this entrypoint. Two paths are materially different when they take a different branch through an access check, a different accounting formula, a different external call, or a different rounding direction. Follow each path across contract boundaries: through libraries, delegatecall, proxy implementations, and calls into other in-scope contracts.\n\nFor each path report:\n- sol_flow_summary: one sentence naming the entrypoint, the branch taken, and where value ends up.\n- sol_flow_trace: an ordered array of `Contract.function (file:line)` steps from the external call to the final state write or transfer.\n- sol_flow_file_path and sol_flow_line: the location of the decisive operation on this path — the transfer, the mint, or the arithmetic that sets an amount.\n- sol_flow_invariant: the property that must hold for the protocol to stay solvent on this path, stated concretely (for example \"totalAssets never decreases without a matching share burn\", \"debt is repriced before collateral is released\").\n- sol_flow_accounting: how balances, shares, debt, fees, or reserves are computed here, including the rounding direction of every division and the order of state write versus external call.\n- sol_flow_external_calls: an array of external interactions on this path — token transfers, callbacks into caller-controlled code, oracle reads, delegatecalls — each as `target.method (file:line)`.\n- sol_flow_price_inputs: an array of price or ratio sources this path reads, each named with its source kind (Chainlink feed, AMM spot reserve, internal share ratio, stored parameter) and `file:line`.\n- sol_flow_attacker_control: exactly which parameters, balances, or preconditions an attacker sets before and during the call.\n- sol_flow_atomicity: whether the path can be entered inside one transaction alongside a flash loan or a same-block price move, and what that composition would change.\n\nReport only paths you traced in the source. A path you could not follow to a state write is not a path."
+        }
+      ]
+    },
+    {
+      "depth": 2,
+      "multiOutput": true,
+      "outputFormat": {
+        "summary": "string",
+        "explanation": "string",
+        "file_path": "string",
+        "line": "number",
+        "vulnerability_type": "string",
+        "malicious_actor": "string",
+        "malicious_input_example": "string",
+        "trigger_flow": "array",
+        "exploitable": "boolean"
+      },
+      "steps": [
+        {
+          "name": "Investigate one path for a funds-at-risk bug",
+          "content": "Investigate one execution path for a concrete, on-chain exploitable vulnerability.\n\nPath: {{sol_flow_summary}}\nTrace: {{sol_flow_trace}}\nDecisive operation: {{sol_flow_file_path}}:{{sol_flow_line}}\nInvariant that must hold: {{sol_flow_invariant}}\nAccounting: {{sol_flow_accounting}}\nExternal calls: {{sol_flow_external_calls}}\nPrice inputs: {{sol_flow_price_inputs}}\nAttacker control: {{sol_flow_attacker_control}}\nAtomicity: {{sol_flow_atomicity}}\nEntrypoint: {{sol_entry_contract}}.{{sol_entry_function}} at {{sol_entry_file_path}}:{{sol_entry_line}}, gated by {{sol_entry_access_control}}, callable by {{sol_entry_caller}}.\n\nRepository {{repo_full}} at {{commit_sha}}, rooted at {{workspace_root}}. Read the source before concluding anything; the summary above is a starting point, not evidence.\n\nCheck this path against the failure classes that pay on smart-contract programs:\n- Theft or permanent freezing of funds, including missing or wrong access control on a value-moving function.\n- Broken accounting: share or debt arithmetic that lets a depositor withdraw more than deposited, first-depositor and donation inflation, rounding that favours the caller, fee-on-transfer or rebasing tokens breaking a balance assumption.\n- Reentrancy, including read-only reentrancy against a view a second protocol prices from, and cross-function reentrancy sharing state.\n- Price manipulation: spot reserves used as a price, a single-block TWAP, stale or unchecked oracle answers, missing sequencer-uptime or heartbeat checks.\n- Flash-loan composition that satisfies a check and reverts it in the same transaction.\n- Liquidation and collateral logic that can be forced to a wrong outcome, including bad-debt socialization and self-liquidation.\n- Unchecked external call return values, arbitrary `call`/`delegatecall` targets, and uninitialized or re-initializable proxies.\n- Signature replay across chains or nonces, deadline-free permits, and front-runnable state transitions where ordering changes who is paid.\n\nDo NOT report:\n- Browser, DOM, `postMessage`, cross-origin, or frontend findings. This target is a smart-contract program and those reports are rejected.\n- Off-chain tooling, CI, deployment scripts, or test files, unless the in-scope focus explicitly names them.\n- Gas optimizations, style, naming, missing events, centralization risk that matches the documented trust model, or theoretical issues with no attacker path.\n- Anything you could not trace to a specific line in this repository.\n\nReturn a finding only when an attacker with the stated position can reach the state change and profit or cause loss. Establish the concrete precondition, the transaction sequence, and the resulting balance change. If the path is sound, or the only harm requires a trusted role acting outside its documented powers, return a single stub with summary \"No finding\", exploitable false, and an explanation naming what you checked and why the path holds.\n\nReport:\n- summary: one sentence naming the bug, the affected function, and the loss.\n- explanation: the full argument, quoting the decisive source lines and stating the invariant that breaks.\n- file_path and line: the vulnerable line, relative to the workspace root.\n- vulnerability_type: the failure class, for example \"Reentrancy\", \"Oracle price manipulation\", \"Share inflation\", \"Missing access control\".\n- malicious_actor: the attacker's on-chain position — an unprivileged EOA, a contract implementing a callback, a whitelisted integrator, a liquidator, a role holder acting beyond its documented powers.\n- malicious_input_example: concrete call data and amounts, including the flash-loan size or donation amount if one is needed.\n- trigger_flow: the ordered transaction and call sequence an attacker executes, one step per array entry.\n- exploitable: true only when you traced every step to source."
+        }
+      ]
+    }
+  ]
+}
