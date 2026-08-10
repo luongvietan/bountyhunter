@@ -99,6 +99,9 @@ model MergeCandidate {
   status        String    @default("pending")
   reason        Json
   decidedAt     DateTime?
+  /// operator | auto | ai — who approved or rejected this candidate.
+  decidedBy     String?
+  decisionNote  String?
   createdAt     DateTime  @default(now())
 
   @@unique([leftEntityId, rightEntityId])
@@ -174,6 +177,10 @@ model Outcome {
   id             String   @id @default(cuid())
   scope          Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
   scopeId        String
+  /// The finding this outcome settles, when it came from the review queue.
+  /// Null for outcomes an operator recorded by hand against a scope.
+  finding        Finding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  findingId      String?  @unique
   action         String
   submittedAt    DateTime
   result         String
@@ -199,6 +206,10 @@ model ScanDispatch {
   status     String    @default("pending")
   score      Float
   error      String?
+  /// Retries after Kritt failed/stopped: same provider once, then fallback env.
+  retryCount     Int       @default(0)
+  providerUsed   String?
+  scopeFileCount Int?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   finishedAt DateTime?
@@ -234,14 +245,38 @@ model Finding {
   maxRewardUsd      Decimal?     @db.Decimal(20, 2)
   rankReasoning     String?
   clusterId         String?
+  /// Post-script chain output. The report and PoC are what a program reads;
+  /// inScope and postScriptValid are the chain's own verdict on the finding.
+  krittReport       String?
+  pocDiff           String?
+  inScope           Boolean?
+  postScriptValid   Boolean?
   raw               Json
-  /// new -> reviewed -> submitted, or dismissed. Nothing leaves this table
-  /// for a bounty platform without a person moving it.
+  /// new -> reviewed -> submitted, or dismissed. Auto-dismiss is allowed for
+  /// clear noise; submit to a bounty platform still requires a person.
   status            String       @default("new")
   decidedAt         DateTime?
+  /// operator | auto | ai — who last changed status away from new.
+  decidedBy         String?
+  triageReason      String?
+  /// Set when an operator opens the code panel or marks reviewed.
+  viewedAt          DateTime?
   fetchedAt         DateTime     @default(now())
+  outcome           Outcome?
 
   @@unique([dispatchId, krittVulnId])
   @@index([status, bountyRank])
   @@index([dispatchId])
+}
+
+/// Timestamped operator events for sync, dispatch, ingest, and watch runs.
+model OpsEvent {
+  id        String   @id @default(cuid())
+  kind      String
+  status    String
+  message   String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
 }
